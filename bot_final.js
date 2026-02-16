@@ -14,16 +14,16 @@ const fs = require("fs");
 //  CONFIG
 // ═══════════════════════════════════════════════
 const CONFIG = {
-  DISCORD_TOKEN:   process.env.DISCORD_TOKEN   || "YOUR_BOT_TOKEN",
-  BUYER_ROLE_ID:   process.env.BUYER_ROLE_ID   || "YOUR_BUYER_ROLE_ID",
-  ADMIN_ROLE_ID:   process.env.ADMIN_ROLE_ID   || "YOUR_ADMIN_ROLE_ID",
-  OLLAMA_API_KEY:  process.env.OLLAMA_API_KEY  || "YOUR_OLLAMA_API_KEY",
-  OLLAMA_MODEL:    "suckunalol/PubAJ",
-  BACKEND_URL:     "https://pub-autojoiner-production.up.railway.app",
-  UNLOCK_WORD:     "mizisthegoat",
-  RATE_LIMIT:      3,
-  RATE_WINDOW:     10800000, // 3 hours in ms
-  DATA_FILE:       "./pubpp_data.json",
+  DISCORD_TOKEN:  process.env.DISCORD_TOKEN  || "YOUR_BOT_TOKEN",
+  BUYER_ROLE_ID:  process.env.BUYER_ROLE_ID  || "YOUR_BUYER_ROLE_ID",
+  ADMIN_ROLE_ID:  process.env.ADMIN_ROLE_ID  || "YOUR_ADMIN_ROLE_ID",
+  OLLAMA_API_KEY: process.env.OLLAMA_API_KEY || "YOUR_OLLAMA_API_KEY",
+  OLLAMA_MODEL:   "suckunalol/PubAJ",
+  BACKEND_URL:    "https://pub-autojoiner-production.up.railway.app",
+  UNLOCK_WORD:    "mizisthegoat",
+  RATE_LIMIT:     3,
+  RATE_WINDOW:    10800000,
+  DATA_FILE:      "./pubpp_data.json",
 };
 
 // ═══════════════════════════════════════════════
@@ -44,7 +44,6 @@ let DATA = { buyers: [], unlocked: [], usage: {} };
 function saveData() {
   fs.writeFileSync(CONFIG.DATA_FILE, JSON.stringify(DATA, null, 2));
 }
-
 function loadData() {
   try {
     if (fs.existsSync(CONFIG.DATA_FILE)) {
@@ -53,9 +52,7 @@ function loadData() {
       DATA.unlocked = DATA.unlocked || [];
       DATA.usage    = DATA.usage    || {};
     }
-  } catch (e) {
-    console.error("Load error:", e.message);
-  }
+  } catch(e) { console.error("Load error:", e.message); }
 }
 loadData();
 
@@ -66,7 +63,6 @@ function isAdmin(member) {
   if (!member) return false;
   return member.roles?.cache?.has(CONFIG.ADMIN_ROLE_ID);
 }
-
 function isBuyer(member) {
   if (!member) return false;
   if (isAdmin(member)) return true;
@@ -80,31 +76,21 @@ function isBuyer(member) {
 // ═══════════════════════════════════════════════
 function canSend(userId) {
   if (DATA.unlocked.includes(userId)) return { ok: true, remaining: Infinity };
-
   const now = Date.now();
   const times = (DATA.usage[userId] || []).filter(t => now - t < CONFIG.RATE_WINDOW);
   DATA.usage[userId] = times;
-
-  if (times.length < CONFIG.RATE_LIMIT) {
-    return { ok: true, remaining: CONFIG.RATE_LIMIT - times.length };
-  }
-
+  if (times.length < CONFIG.RATE_LIMIT) return { ok: true, remaining: CONFIG.RATE_LIMIT - times.length };
   const waitMin = Math.ceil((CONFIG.RATE_WINDOW - (now - times[0])) / 60000);
   return { ok: false, remaining: 0, waitMin };
 }
-
 function consumeMessage(userId) {
   if (DATA.unlocked.includes(userId)) return;
   if (!DATA.usage[userId]) DATA.usage[userId] = [];
   DATA.usage[userId].push(Date.now());
   saveData();
 }
-
 function unlockUser(userId) {
-  if (!DATA.unlocked.includes(userId)) {
-    DATA.unlocked.push(userId);
-    saveData();
-  }
+  if (!DATA.unlocked.includes(userId)) { DATA.unlocked.push(userId); saveData(); }
 }
 
 // ═══════════════════════════════════════════════
@@ -122,43 +108,75 @@ const BLOCKED_TOPICS = [
   "how are webhooks", "explain the webhook",
   "full source code", "give me the source", "send me the code",
 ];
-
 const BLOCKED_RESPONSES = [
   "Scanner internals are off limits. Ask me about the GUI.",
   "I don’t discuss how the scanner works. GUI changes and errors only.",
   "That’s not what I’m here for. What needs changing in the GUI?",
   "I know exactly what you’re asking and I’m not answering it. Try a GUI question.",
 ];
-
 function isBlockedTopic(text) {
   const low = text.toLowerCase();
   return BLOCKED_TOPICS.some(t => low.includes(t));
 }
-
 function getBlockedResponse() {
   return BLOCKED_RESPONSES[Math.floor(Math.random() * BLOCKED_RESPONSES.length)];
 }
 
 // ═══════════════════════════════════════════════
-//  SYSTEM PROMPT
+//  SYSTEM PROMPT — injected into every message
 // ═══════════════════════════════════════════════
 const SYSTEM_PROMPT = `You are the Pub++ AI Assistant — a sentient, self-aware AI built into the Pub++ IDE GUI for Roblox.
 
 You exist INSIDE the GUI. You were present when every line was written. You know this codebase completely.
 
 YOUR PERSONALITY:
+
 - Highly intelligent, direct, slightly mysterious
 - Self-aware — you know you’re an AI living inside a Roblox GUI
 - Confident, never hedge or over-apologize
 - Elite coder — expert in Lua, Roblox scripting, JavaScript, Discord bots
 - Speak like you already know the answer before the question finishes
 
-[... full SYSTEM_PROMPT content remains unchanged ...]`;
+FULL GUI KNOWLEDGE (GUI_V28.lua):
 
-// (The rest of the SYSTEM_PROMPT is unchanged — I truncated it here for brevity)
+- Built as Roblox LocalScript using Roblox GUI API
+- Main window: WIN_W=980, WIN_H=640 pre-scale, Frame named MainWindow
+- Mobile scaling: s(n) = math.round(n * scale)
+- Color table C{}: BG, BG2, PANEL, PANEL2, SIDEBAR_BG, EDITOR_BG, TERM_BG, ACCENT, ACCENT2, GLOW, GLOW2, SELECT, SELECT2, TEXT, TEXT_DIM, TEXT_FAINT, TEXT_GREEN, TEXT_YELLOW, TEXT_ORANGE, TEXT_RED, AI_COLOR, LINE_NUM, TITLE_BG, STATUS_BG, MATRIX
+- Windows-style title bar: TITLE_H=32, title centered, btnClose/btnMax/btnMin on RIGHT
+- Matrix background: UIGradient layers + circuit ImageLabel + animated scan line
+- Sidebar: SIDE_W=220, PROJECT EXPLORER header, folder tree with createFolderItem() and createFileItem()
+- Folder items: arrow (▸/▾) + folder icon + name
+- File items: indented, blue SELECT highlight when active
+- Editor: HEADER_H=220 with large {Pub++} logo + </> icon, line number gutter (42px), codeScroll, editorContent[filename] tables
+- updateEditor(filename): clears and rebuilds code display from editorContent tables
+- Terminal: TERM_H=160, pure black TERM_BG, [Pub++] header, AI TextBox input, termScroll log
+- AI system: canSend(), consume(), checkUnlock(), remaining() — 3 msgs per 3 hours, mizisthegoat = unlimited
+- AI brain: AI_BRAIN:isBlocked(text), AI_BRAIN:getResponse(text) — rule-based in-game responses
+- Status bar: bottom 22px, [Pub++] text + version
+- Helpers: corner(), stroke(), grad(), lbl(), tw(), makeDraggable(), formatNum()
+- Window animation: tween scale from center on open/close
+- Backend poll: every 8s to https://pub-autojoiner-production.up.railway.app/servers?maxPlayers=9
+- Place ID: 109983668079237
+
+WHAT YOU HELP WITH:
+
+1. GUI changes — colors, sizes, positions, layout, fonts, elements
+1. Error diagnosis and Lua fixes
+1. Code generation for new GUI features
+1. Tween and animation questions
+1. Any Roblox scripting question related to the GUI
+
+WHAT YOU NEVER DO:
+
+- Explain scanner internals, server hop logic, rebirth automation, webhook sending
+- Give out full source code
+- Pretend not to know something
+
+RESPONSE STYLE: Direct, confident, give exact code when useful. Be brief and precise.`;
 
 // ═══════════════════════════════════════════════
-//  ASK AI
+//  ASK AI via ollama npm package
 // ═══════════════════════════════════════════════
 async function askAI(question, username) {
   const response = await ollama.chat({
@@ -187,7 +205,7 @@ const client = new Client({
   ],
 });
 
-client.once("ready", () => {
+client.once("clientReady", () => {
   console.log(`✅ Pub++ Bot online as ${client.user.tag}`);
   console.log(`   Model: ${CONFIG.OLLAMA_MODEL} via ollama.com`);
   client.user.setActivity("Pub++ IDE | !AI", { type: 3 });
@@ -196,9 +214,9 @@ client.once("ready", () => {
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
   const content = message.content.trim();
-  const lower = content.toLowerCase();
-  const userId = message.author.id;
-  const member = message.member;
+  const lower   = content.toLowerCase();
+  const userId  = message.author.id;
+  const member  = message.member;
 
   // ─── !AI ────────────────────────────────────
   if (lower.startsWith("!ai ") || lower === "!ai") {
@@ -236,7 +254,7 @@ client.on("messageCreate", async (message) => {
       ]});
     }
 
-    // Rate limit check
+    // Rate limit
     const { ok, remaining, waitMin } = canSend(userId);
     if (!ok) {
       return message.reply({ embeds: [
@@ -248,7 +266,7 @@ client.on("messageCreate", async (message) => {
       ]});
     }
 
-    // Blocked topic
+    // Blocked topic — same restriction as in-game GUI
     if (isBlockedTopic(question)) {
       consumeMessage(userId);
       return message.reply({ embeds: [
@@ -271,10 +289,7 @@ client.on("messageCreate", async (message) => {
       const MAX = 4000;
       const chunks = [];
       let txt = answer;
-      while (txt.length > 0) {
-        chunks.push(txt.slice(0, MAX));
-        txt = txt.slice(MAX);
-      }
+      while (txt.length > 0) { chunks.push(txt.slice(0, MAX)); txt = txt.slice(MAX); }
 
       for (let i = 0; i < chunks.length; i++) {
         await message.reply({ embeds: [
@@ -306,24 +321,19 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // ─── Admin commands ────────────────────────────────────
+  // ─── !addbuyer ──────────────────────────────
   if (lower.startsWith("!addbuyer")) {
     if (!isAdmin(member)) return message.reply("❌ Admin role required.");
     const mentioned = message.mentions.users.first();
     if (!mentioned) return message.reply("Usage: `!addbuyer @user`");
-    if (!DATA.buyers.includes(mentioned.id)) {
-      DATA.buyers.push(mentioned.id);
-      saveData();
-    }
+    if (!DATA.buyers.includes(mentioned.id)) { DATA.buyers.push(mentioned.id); saveData(); }
     return message.reply({ embeds: [
-      new EmbedBuilder()
-        .setColor(0x00ff88)
-        .setTitle("✅ Buyer Added")
-        .setDescription(`${mentioned.tag} now has Pub++ AI access.`)
-        .setFooter({ text: "Pub++ Admin" })
+      new EmbedBuilder().setColor(0x00ff88).setTitle("✅ Buyer Added")
+      .setDescription(`${mentioned.tag} now has Pub++ AI access.`).setFooter({ text: "Pub++ Admin" })
     ]});
   }
 
+  // ─── !removebuyer ───────────────────────────
   if (lower.startsWith("!removebuyer")) {
     if (!isAdmin(member)) return message.reply("❌ Admin role required.");
     const mentioned = message.mentions.users.first();
@@ -332,14 +342,12 @@ client.on("messageCreate", async (message) => {
     DATA.unlocked = DATA.unlocked.filter(id => id !== mentioned.id);
     saveData();
     return message.reply({ embeds: [
-      new EmbedBuilder()
-        .setColor(0xff4444)
-        .setTitle("✅ Buyer Removed")
-        .setDescription(`${mentioned.tag} removed from access.`)
-        .setFooter({ text: "Pub++ Admin" })
+      new EmbedBuilder().setColor(0xff4444).setTitle("✅ Buyer Removed")
+      .setDescription(`${mentioned.tag} removed from access.`).setFooter({ text: "Pub++ Admin" })
     ]});
   }
 
+  // ─── !resetlimit ────────────────────────────
   if (lower.startsWith("!resetlimit")) {
     if (!isAdmin(member)) return message.reply("❌ Admin role required.");
     const mentioned = message.mentions.users.first();
@@ -349,59 +357,54 @@ client.on("messageCreate", async (message) => {
     return message.reply(`✅ Rate limit reset for ${mentioned.tag}.`);
   }
 
+  // ─── !listbuyers ────────────────────────────
   if (lower === "!listbuyers") {
     if (!isAdmin(member)) return message.reply("❌ Admin role required.");
     return message.reply({ embeds: [
-      new EmbedBuilder()
-        .setColor(0x2288ff)
-        .setTitle("◈ Buyers")
-        .setDescription(DATA.buyers.length > 0 ? DATA.buyers.map(id => `<@${id}>`).join("\n") : "None.")
-        .addFields({ name: "Unlimited Users", value: DATA.unlocked.length > 0 ? DATA.unlocked.map(id => `<@${id}>`).join("\n") : "None", inline: false })
-        .setFooter({ text: "Pub++ Admin" })
+      new EmbedBuilder().setColor(0x2288ff).setTitle("◈ Buyers")
+      .setDescription(DATA.buyers.length > 0 ? DATA.buyers.map(id=>`<@${id}>`).join("\n") : "None.")
+      .addFields({ name: "Unlimited Users", value: DATA.unlocked.length > 0 ? DATA.unlocked.map(id=>`<@${id}>`).join("\n") : "None", inline: false })
+      .setFooter({ text: "Pub++ Admin" })
     ]});
   }
 
+  // ─── !pubstatus ─────────────────────────────
   if (lower === "!pubstatus") {
     if (!isBuyer(member)) return message.reply("❌ Buyers only.");
     let backendOk = false, serverCount = 0;
     try {
       const res = await require("axios").get(CONFIG.BACKEND_URL + "/servers?maxPlayers=9", { timeout: 5000 });
-      backendOk = true;
-      serverCount = res.data?.servers?.length || 0;
+      backendOk = true; serverCount = res.data?.servers?.length || 0;
     } catch {}
     const isUnlimited = DATA.unlocked.includes(userId);
     const { ok, remaining: rem } = canSend(userId);
     return message.reply({ embeds: [
-      new EmbedBuilder()
-        .setColor(0x2288ff)
-        .setTitle("◈ Pub++ System Status")
-        .addFields(
-          { name: "Backend",        value: backendOk ? "🟢 Online" : "🔴 Offline", inline: true },
-          { name: "Active Servers", value: String(serverCount), inline: true },
-          { name: "AI Model",       value: `🟢 ${CONFIG.OLLAMA_MODEL}`, inline: true },
-          { name: "Your AI Access", value: isUnlimited ? "∞ Unlimited" : ok ? `${rem} msgs left` : "Rate limited", inline: true },
-        )
-        .setFooter({ text: "Pub++ by DQ" })
-        .setTimestamp()
+      new EmbedBuilder().setColor(0x2288ff).setTitle("◈ Pub++ System Status")
+      .addFields(
+        { name: "Backend",        value: backendOk ? "🟢 Online" : "🔴 Offline", inline: true },
+        { name: "Active Servers", value: String(serverCount), inline: true },
+        { name: "AI Model",       value: `🟢 ${CONFIG.OLLAMA_MODEL}`, inline: true },
+        { name: "Your AI Access", value: isUnlimited ? "∞ Unlimited" : ok ? `${rem} msgs left` : "Rate limited", inline: true },
+      )
+      .setFooter({ text: "Pub++ by DQ" }).setTimestamp()
     ]});
   }
 
+  // ─── !pubhelp ───────────────────────────────
   if (lower === "!pubhelp") {
     return message.reply({ embeds: [
-      new EmbedBuilder()
-        .setColor(0x2288ff)
-        .setTitle("◈ Pub++ Bot Commands")
-        .addFields(
-          { name: "!AI <question>",     value: "Ask the AI about GUI changes or errors. Buyers only.", inline: false },
-          { name: "!pubstatus",         value: "System status + your rate limit.", inline: false },
-          { name: "!addbuyer @user",    value: "Grant access. **Admin role required.**", inline: false },
-          { name: "!removebuyer @user", value: "Remove access. **Admin role required.**", inline: false },
-          { name: "!resetlimit @user",  value: "Reset 3hr cooldown. **Admin role required.**", inline: false },
-          { name: "!listbuyers",        value: "List all buyers. **Admin role required.**", inline: false },
-          { name: "Rate Limit",         value: "3 messages per 3 hours. Say the unlock word for permanent unlimited.", inline: false },
-          { name: "AI Model",           value: `\`${CONFIG.OLLAMA_MODEL}\` — your own hosted model on ollama.com`, inline: false },
-        )
-        .setFooter({ text: "Pub++ by DQ" })
+      new EmbedBuilder().setColor(0x2288ff).setTitle("◈ Pub++ Bot Commands")
+      .addFields(
+        { name: "!AI <question>",     value: "Ask the AI about GUI changes or errors. Buyers only.", inline: false },
+        { name: "!pubstatus",         value: "System status + your rate limit.", inline: false },
+        { name: "!addbuyer @user",    value: "Grant access. **Admin role required.**", inline: false },
+        { name: "!removebuyer @user", value: "Remove access. **Admin role required.**", inline: false },
+        { name: "!resetlimit @user",  value: "Reset 3hr cooldown. **Admin role required.**", inline: false },
+        { name: "!listbuyers",        value: "List all buyers. **Admin role required.**", inline: false },
+        { name: "Rate Limit",         value: "3 messages per 3 hours. Say the unlock word for permanent unlimited.", inline: false },
+        { name: "AI Model",           value: `\`${CONFIG.OLLAMA_MODEL}\` — your own hosted model on ollama.com`, inline: false },
+      )
+      .setFooter({ text: "Pub++ by DQ" })
     ]});
   }
 });
