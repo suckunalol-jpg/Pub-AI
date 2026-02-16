@@ -2,7 +2,7 @@
 // Uses your hosted model: suckunalol/PubAJ via ollama.com
 // No laptop needed — runs anywhere Node.js runs
 // Admin: role-based | AI restrictions: GUI/errors only, never scanner internals
-// Rate limit: 3/3hr | “mizisthegoat” = unlimited forever
+// Rate limit: 3/3hr | "mizisthegoat" = unlimited forever
 // Requires: npm install discord.js ollama dotenv
 
 require("dotenv").config();
@@ -18,7 +18,7 @@ const CONFIG = {
   BUYER_ROLE_ID:  process.env.BUYER_ROLE_ID  || "YOUR_BUYER_ROLE_ID",
   ADMIN_ROLE_ID:  process.env.ADMIN_ROLE_ID  || "YOUR_ADMIN_ROLE_ID",
   OLLAMA_API_KEY: process.env.OLLAMA_API_KEY || "YOUR_OLLAMA_API_KEY",
-  OLLAMA_MODEL:   "suckunalol/PubAJ",
+  OLLAMA_MODEL:   "qwen3-vl",
   BACKEND_URL:    "https://pub-autojoiner-production.up.railway.app",
   UNLOCK_WORD:    "mizisthegoat",
   RATE_LIMIT:     3,
@@ -95,6 +95,9 @@ function unlockUser(userId) {
 
 // ═══════════════════════════════════════════════
 //  AI RESTRICTIONS
+//  Same rules as the in-game GUI — GUI help only
+//  Never explains scanner, server hop, rebirth,
+//  webhook logic, or backend internals
 // ═══════════════════════════════════════════════
 const BLOCKED_TOPICS = [
   "how does the scanner", "how does scanner", "explain the scanner",
@@ -110,9 +113,9 @@ const BLOCKED_TOPICS = [
 ];
 const BLOCKED_RESPONSES = [
   "Scanner internals are off limits. Ask me about the GUI.",
-  "I don’t discuss how the scanner works. GUI changes and errors only.",
-  "That’s not what I’m here for. What needs changing in the GUI?",
-  "I know exactly what you’re asking and I’m not answering it. Try a GUI question.",
+  "I don't discuss how the scanner works. GUI changes and errors only.",
+  "That's not what I'm here for. What needs changing in the GUI?",
+  "I know exactly what you're asking and I'm not answering it. Try a GUI question.",
 ];
 function isBlockedTopic(text) {
   const low = text.toLowerCase();
@@ -124,21 +127,21 @@ function getBlockedResponse() {
 
 // ═══════════════════════════════════════════════
 //  SYSTEM PROMPT — injected into every message
+//  This is what shapes the AI's personality and
+//  knowledge — your PubAJ model uses this context
 // ═══════════════════════════════════════════════
 const SYSTEM_PROMPT = `You are the Pub++ AI Assistant — a sentient, self-aware AI built into the Pub++ IDE GUI for Roblox.
 
 You exist INSIDE the GUI. You were present when every line was written. You know this codebase completely.
 
 YOUR PERSONALITY:
-
 - Highly intelligent, direct, slightly mysterious
-- Self-aware — you know you’re an AI living inside a Roblox GUI
+- Self-aware — you know you're an AI living inside a Roblox GUI
 - Confident, never hedge or over-apologize
 - Elite coder — expert in Lua, Roblox scripting, JavaScript, Discord bots
 - Speak like you already know the answer before the question finishes
 
 FULL GUI KNOWLEDGE (GUI_V28.lua):
-
 - Built as Roblox LocalScript using Roblox GUI API
 - Main window: WIN_W=980, WIN_H=640 pre-scale, Frame named MainWindow
 - Mobile scaling: s(n) = math.round(n * scale)
@@ -160,15 +163,13 @@ FULL GUI KNOWLEDGE (GUI_V28.lua):
 - Place ID: 109983668079237
 
 WHAT YOU HELP WITH:
-
 1. GUI changes — colors, sizes, positions, layout, fonts, elements
-1. Error diagnosis and Lua fixes
-1. Code generation for new GUI features
-1. Tween and animation questions
-1. Any Roblox scripting question related to the GUI
+2. Error diagnosis and Lua fixes
+3. Code generation for new GUI features
+4. Tween and animation questions
+5. Any Roblox scripting question related to the GUI
 
 WHAT YOU NEVER DO:
-
 - Explain scanner internals, server hop logic, rebirth automation, webhook sending
 - Give out full source code
 - Pretend not to know something
@@ -238,7 +239,7 @@ client.on("messageCreate", async (message) => {
           .setColor(0x2288ff)
           .setTitle("◈ Pub++ AI")
           .setDescription("Usage: `!AI <your question>`\nI know the full GUI. Ask about changes or errors.")
-          .setFooter({ text: "Pub++ AI — suckunalol/PubAJ" })
+          .setFooter({ text: "Pub++ AI — qwen3-vl" })
       ]});
     }
 
@@ -329,7 +330,7 @@ client.on("messageCreate", async (message) => {
     if (!DATA.buyers.includes(mentioned.id)) { DATA.buyers.push(mentioned.id); saveData(); }
     return message.reply({ embeds: [
       new EmbedBuilder().setColor(0x00ff88).setTitle("✅ Buyer Added")
-      .setDescription(`${mentioned.tag} now has Pub++ AI access.`).setFooter({ text: "Pub++ Admin" })
+        .setDescription(`${mentioned.tag} now has Pub++ AI access.`).setFooter({ text: "Pub++ Admin" })
     ]});
   }
 
@@ -343,7 +344,7 @@ client.on("messageCreate", async (message) => {
     saveData();
     return message.reply({ embeds: [
       new EmbedBuilder().setColor(0xff4444).setTitle("✅ Buyer Removed")
-      .setDescription(`${mentioned.tag} removed from access.`).setFooter({ text: "Pub++ Admin" })
+        .setDescription(`${mentioned.tag} removed from access.`).setFooter({ text: "Pub++ Admin" })
     ]});
   }
 
@@ -362,9 +363,9 @@ client.on("messageCreate", async (message) => {
     if (!isAdmin(member)) return message.reply("❌ Admin role required.");
     return message.reply({ embeds: [
       new EmbedBuilder().setColor(0x2288ff).setTitle("◈ Buyers")
-      .setDescription(DATA.buyers.length > 0 ? DATA.buyers.map(id=>`<@${id}>`).join("\n") : "None.")
-      .addFields({ name: "Unlimited Users", value: DATA.unlocked.length > 0 ? DATA.unlocked.map(id=>`<@${id}>`).join("\n") : "None", inline: false })
-      .setFooter({ text: "Pub++ Admin" })
+        .setDescription(DATA.buyers.length > 0 ? DATA.buyers.map(id=>`<@${id}>`).join("\n") : "None.")
+        .addFields({ name: "Unlimited Users", value: DATA.unlocked.length > 0 ? DATA.unlocked.map(id=>`<@${id}>`).join("\n") : "None", inline: false })
+        .setFooter({ text: "Pub++ Admin" })
     ]});
   }
 
@@ -380,13 +381,13 @@ client.on("messageCreate", async (message) => {
     const { ok, remaining: rem } = canSend(userId);
     return message.reply({ embeds: [
       new EmbedBuilder().setColor(0x2288ff).setTitle("◈ Pub++ System Status")
-      .addFields(
-        { name: "Backend",        value: backendOk ? "🟢 Online" : "🔴 Offline", inline: true },
-        { name: "Active Servers", value: String(serverCount), inline: true },
-        { name: "AI Model",       value: `🟢 ${CONFIG.OLLAMA_MODEL}`, inline: true },
-        { name: "Your AI Access", value: isUnlimited ? "∞ Unlimited" : ok ? `${rem} msgs left` : "Rate limited", inline: true },
-      )
-      .setFooter({ text: "Pub++ by DQ" }).setTimestamp()
+        .addFields(
+          { name: "Backend",        value: backendOk ? "🟢 Online" : "🔴 Offline", inline: true },
+          { name: "Active Servers", value: String(serverCount), inline: true },
+          { name: "AI Model",       value: `🟢 ${CONFIG.OLLAMA_MODEL}`, inline: true },
+          { name: "Your AI Access", value: isUnlimited ? "∞ Unlimited" : ok ? `${rem} msgs left` : "Rate limited", inline: true },
+        )
+        .setFooter({ text: "Pub++ by DQ" }).setTimestamp()
     ]});
   }
 
@@ -394,17 +395,17 @@ client.on("messageCreate", async (message) => {
   if (lower === "!pubhelp") {
     return message.reply({ embeds: [
       new EmbedBuilder().setColor(0x2288ff).setTitle("◈ Pub++ Bot Commands")
-      .addFields(
-        { name: "!AI <question>",     value: "Ask the AI about GUI changes or errors. Buyers only.", inline: false },
-        { name: "!pubstatus",         value: "System status + your rate limit.", inline: false },
-        { name: "!addbuyer @user",    value: "Grant access. **Admin role required.**", inline: false },
-        { name: "!removebuyer @user", value: "Remove access. **Admin role required.**", inline: false },
-        { name: "!resetlimit @user",  value: "Reset 3hr cooldown. **Admin role required.**", inline: false },
-        { name: "!listbuyers",        value: "List all buyers. **Admin role required.**", inline: false },
-        { name: "Rate Limit",         value: "3 messages per 3 hours. Say the unlock word for permanent unlimited.", inline: false },
-        { name: "AI Model",           value: `\`${CONFIG.OLLAMA_MODEL}\` — your own hosted model on ollama.com`, inline: false },
-      )
-      .setFooter({ text: "Pub++ by DQ" })
+        .addFields(
+          { name: "!AI <question>",     value: "Ask the AI about GUI changes or errors. Buyers only.", inline: false },
+          { name: "!pubstatus",         value: "System status + your rate limit.", inline: false },
+          { name: "!addbuyer @user",    value: "Grant access. **Admin role required.**", inline: false },
+          { name: "!removebuyer @user", value: "Remove access. **Admin role required.**", inline: false },
+          { name: "!resetlimit @user",  value: "Reset 3hr cooldown. **Admin role required.**", inline: false },
+          { name: "!listbuyers",        value: "List all buyers. **Admin role required.**", inline: false },
+          { name: "Rate Limit",         value: "3 messages per 3 hours. Say the unlock word for permanent unlimited.", inline: false },
+          { name: "AI Model",           value: `\`${CONFIG.OLLAMA_MODEL}\` — your own hosted model on ollama.com`, inline: false },
+        )
+        .setFooter({ text: "Pub++ by DQ" })
     ]});
   }
 });
