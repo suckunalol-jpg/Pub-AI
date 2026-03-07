@@ -1,0 +1,117 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #0a0a1a;
+  --bg-secondary: #0d1b2a;
+  --accent: #00aaff;
+  --accent-dark: #0066ff;
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg-primary);
+  color: white;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* Arcade font for logo */
+.font-arcade {
+  font-family: 'Press Start 2P', cursive;
+}
+
+/* Glassmorphism utilities */
+@layer components {
+  .glass-panel {
+    @apply bg-black/30 backdrop-blur-xl border border-white/10 rounded-2xl;
+  }
+
+  .glass-panel-solid {
+    @apply bg-navy-900/80 backdrop-blur-xl border border-white/10 rounded-2xl;
+  }
+
+  .glass-button {
+    @apply bg-white/5 backdrop-blur-md border border-white/10 rounded-xl
+           hover:bg-white/10 hover:border-accent/30 transition-all duration-200;
+  }
+
+  .glass-input {
+    @apply bg-white/5 backdrop-blur-md border border-white/10 rounded-xl
+           focus:border-accent/50 focus:ring-1 focus:ring-accent/20
+           outline-none transition-all duration-200 text-white placeholder-gray-500;
+  }
+
+  .glow-accent {
+    box-shadow: 0 0 15px rgba(0, 170, 255, 0.15);
+  }
+
+  .glow-accent-hover:hover {
+    box-shadow: 0 0 20px rgba(0, 170, 255, 0.25);
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+/* Binary rain canvas container */
+#binary-rain-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Selection color */
+::selection {
+  background: rgba(0, 170, 255, 0.3);
+  color: white;
+}
+
+/* Smooth transitions for route changes */
+.page-transition {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
