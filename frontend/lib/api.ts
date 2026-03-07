@@ -159,3 +159,109 @@ export function getApiKeys() {
 export function revokeApiKey(id: string) {
   return request(`/api/auth/api-keys/${id}`, { method: "DELETE" });
 }
+
+// Training
+
+export function startFinetune(config: {
+  base_model: string;
+  learning_rate: number;
+  epochs: number;
+  batch_size: number;
+  lora_rank: number;
+  dataset_id: string;
+}) {
+  return request<{ job_id: string }>("/api/training/finetune", {
+    method: "POST",
+    body: config,
+  });
+}
+
+export function startMerge(config: {
+  models: string[];
+  method: string;
+  interpolation_factor: number;
+}) {
+  return request<{ job_id: string }>("/api/training/merge", {
+    method: "POST",
+    body: config,
+  });
+}
+
+export function startRLHF() {
+  return request<{ job_id: string }>("/api/training/rlhf", { method: "POST" });
+}
+
+export async function uploadDataset(file: File, type: string) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("pub_token") : null;
+  const form = new FormData();
+  form.append("file", file);
+  form.append("type", type);
+
+  const res = await fetch(`${API_BASE}/api/training/upload-dataset`, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: form,
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(error.detail || `Upload failed: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export function getTrainingJobs() {
+  return request<{ id: string; type: string; status: string; progress: number; total_steps: number; current_step: number; loss_history: number[]; started_at: string; config: Record<string, unknown> }[]>(
+    "/api/training/jobs"
+  );
+}
+
+export function getJobStatus(id: string) {
+  return request<{ id: string; type: string; status: string; progress: number; total_steps: number; current_step: number; loss_history: number[]; started_at: string }>(
+    `/api/training/jobs/${id}`
+  );
+}
+
+export function cancelJob(id: string) {
+  return request(`/api/training/jobs/${id}`, { method: "DELETE" });
+}
+
+export function exportModel(modelId: string, format: string) {
+  return request<{ status: string }>("/api/training/export", {
+    method: "POST",
+    body: { model_id: modelId, format },
+  });
+}
+
+export function listDatasets() {
+  return request<{ id: string; name: string; size: number; type: string; created_at: string }[]>(
+    "/api/training/datasets"
+  );
+}
+
+export function deleteDataset(id: string) {
+  return request(`/api/training/datasets/${id}`, { method: "DELETE" });
+}
+
+export function exportChatDataset() {
+  return request<{ id: string }>("/api/training/datasets/export-chat", { method: "POST" });
+}
+
+export function listModels() {
+  return request<{ id: string; name: string; type: string; size_mb: number; created_at: string; dataset_used?: string; is_active: boolean }[]>(
+    "/api/training/models"
+  );
+}
+
+export function setActiveModel(modelId: string) {
+  return request(`/api/training/models/${modelId}/activate`, { method: "POST" });
+}
+
+export function getFeedbackStats() {
+  return request<{ liked: number; disliked: number; pairs: number }>(
+    "/api/training/feedback-stats"
+  );
+}

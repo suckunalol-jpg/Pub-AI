@@ -14,8 +14,14 @@ class Settings(BaseSettings):
     AI_API_KEY: str = ""
     AI_MODEL: str = "claude-sonnet-4-20250514"
 
-    # Ollama (only used when AI_PROVIDER=ollama)
+    # Ollama
     OLLAMA_HOST: str = "http://localhost:11434"
+    OLLAMA_MODEL_NAME: str = "pub-ai"
+
+    # vLLM (custom model on Railway or self-hosted)
+    VLLM_HOST: str = ""
+    VLLM_API_KEY: str = ""
+    VLLM_MODEL_NAME: str = "pub-ai"
 
     # Auth
     SECRET_KEY: str = "CHANGE-ME-IN-PRODUCTION"

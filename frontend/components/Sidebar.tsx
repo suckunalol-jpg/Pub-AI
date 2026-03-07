@@ -7,6 +7,7 @@ import {
   Bot,
   Workflow,
   BookOpen,
+  Brain,
   Gamepad2,
   ChevronLeft,
   ChevronRight,
@@ -25,6 +26,7 @@ const navItems: { id: ActiveView; label: string; icon: React.ElementType }[] = [
   { id: "agents", label: "Agents", icon: Bot },
   { id: "workflows", label: "Workflows", icon: Workflow },
   { id: "knowledge", label: "Knowledge", icon: BookOpen },
+  { id: "training", label: "Training", icon: Brain },
   { id: "roblox", label: "Roblox API", icon: Gamepad2 },
 ];
 

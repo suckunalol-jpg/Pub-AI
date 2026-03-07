@@ -7,9 +7,10 @@ import ChatInterface from "@/components/ChatInterface";
 import AgentPanel from "@/components/AgentPanel";
 import WorkflowBuilder from "@/components/WorkflowBuilder";
 import KnowledgeUpload from "@/components/KnowledgeUpload";
+import TrainingPanel from "@/components/TrainingPanel";
 import ApiKeyPanel from "@/components/ApiKeyPanel";
 
-export type ActiveView = "chat" | "agents" | "workflows" | "knowledge" | "roblox";
+export type ActiveView = "chat" | "agents" | "workflows" | "knowledge" | "training" | "roblox";
 
 export default function Home() {
   const [activeView, setActiveView] = useState<ActiveView>("chat");
@@ -24,6 +25,8 @@ export default function Home() {
         return <WorkflowBuilder />;
       case "knowledge":
         return <KnowledgeUpload />;
+      case "training":
+        return <TrainingPanel />;
       case "roblox":
         return <ApiKeyPanel />;
     }
