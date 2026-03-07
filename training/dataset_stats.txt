@@ -1,0 +1,17 @@
+Pub AI Combined Training Dataset
+========================================
+Total examples: 2499
+
+By source:
+  claude-opus-250: 246
+  opus-3000-filtered: 2253
+
+By category:
+  code: 322
+  general: 4
+  math: 2170
+  reasoning: 3
+
+By difficulty:
+  hard: 274
+  medium: 2225
