@@ -32,7 +32,7 @@ class PubAIProvider:
     """Unified AI provider that prefers the custom Pub AI model.
 
     Inference routing:
-        1. vLLM server (custom model deployed on Railway or self-hosted)
+        1. vLLM / HuggingFace Inference API (custom model)
         2. Ollama (custom model running locally)
         3. External API fallback (Claude or OpenAI)
     """
@@ -107,7 +107,10 @@ class PubAIProvider:
         response = await self.chat(messages, temperature=temperature, max_tokens=max_tokens)
         yield response.content
 
-    # ---------- vLLM (custom model on Railway / self-hosted) ----------
+    # ---------- vLLM / HuggingFace Inference API ----------
+
+    def _is_hf_host(self) -> bool:
+        return "huggingface.co" in (settings.VLLM_HOST or "")
 
     async def _vllm(
         self,
@@ -120,17 +123,31 @@ class PubAIProvider:
             headers["Authorization"] = f"Bearer {settings.VLLM_API_KEY}"
 
         start = time.perf_counter()
-        resp = await self._client.post(
-            f"{settings.VLLM_HOST}/v1/chat/completions",
-            headers=headers,
-            json={
+
+        if self._is_hf_host():
+            # HuggingFace Inference API (text-generation-inference)
+            url = f"{settings.VLLM_HOST}"
+            body: Dict[str, Any] = {
                 "model": settings.VLLM_MODEL_NAME,
                 "messages": messages,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
-            },
-            timeout=120.0,
-        )
+                "stream": False,
+            }
+            # HF TGI exposes OpenAI-compatible /v1/chat/completions
+            if "/v1/" not in url:
+                url = f"{url.rstrip('/')}/v1/chat/completions"
+        else:
+            # Standard vLLM server
+            url = f"{settings.VLLM_HOST}/v1/chat/completions"
+            body = {
+                "model": settings.VLLM_MODEL_NAME,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+
+        resp = await self._client.post(url, headers=headers, json=body, timeout=120.0)
         latency = int((time.perf_counter() - start) * 1000)
         resp.raise_for_status()
         data = resp.json()
@@ -144,7 +161,7 @@ class PubAIProvider:
             tokens_in=usage.get("prompt_tokens", 0),
             tokens_out=usage.get("completion_tokens", 0),
             latency_ms=latency,
-            provider="vllm",
+            provider="huggingface" if self._is_hf_host() else "vllm",
         )
 
     async def _vllm_stream(
@@ -159,9 +176,16 @@ class PubAIProvider:
         if settings.VLLM_API_KEY:
             headers["Authorization"] = f"Bearer {settings.VLLM_API_KEY}"
 
+        if self._is_hf_host():
+            url = settings.VLLM_HOST.rstrip("/")
+            if "/v1/" not in url:
+                url = f"{url}/v1/chat/completions"
+        else:
+            url = f"{settings.VLLM_HOST}/v1/chat/completions"
+
         async with self._client.stream(
             "POST",
-            f"{settings.VLLM_HOST}/v1/chat/completions",
+            url,
             headers=headers,
             json={
                 "model": settings.VLLM_MODEL_NAME,

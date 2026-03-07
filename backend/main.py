@@ -69,8 +69,10 @@ app.include_router(memory_router)
 
 @app.get("/health")
 async def health_check():
+    provider = "huggingface" if settings.VLLM_HOST and "huggingface.co" in settings.VLLM_HOST else settings.AI_PROVIDER
+    model = settings.VLLM_MODEL_NAME if settings.VLLM_HOST else settings.AI_MODEL
     return {
         "status": "online",
-        "ai_provider": settings.AI_PROVIDER,
-        "ai_model": settings.AI_MODEL,
+        "ai_provider": provider,
+        "ai_model": model,
     }
