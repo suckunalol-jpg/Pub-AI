@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   MessageSquare,
@@ -12,6 +12,8 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
+  LogOut,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ActiveView } from "@/app/page";
@@ -21,17 +23,40 @@ interface SidebarProps {
   onViewChange: (view: ActiveView) => void;
 }
 
-const navItems: { id: ActiveView; label: string; icon: React.ElementType }[] = [
+// Admin username that can see backend stats
+const ADMIN_USERNAME = "obinofue1";
+
+// Items visible to everyone
+const publicNavItems: { id: ActiveView; label: string; icon: React.ElementType }[] = [
   { id: "chat", label: "Chat", icon: MessageSquare },
   { id: "agents", label: "Agents", icon: Bot },
+  { id: "roblox", label: "Roblox API", icon: Gamepad2 },
+];
+
+// Items only visible to admin
+const adminNavItems: { id: ActiveView; label: string; icon: React.ElementType }[] = [
   { id: "workflows", label: "Workflows", icon: Workflow },
   { id: "knowledge", label: "Knowledge", icon: BookOpen },
   { id: "training", label: "Training", icon: Brain },
-  { id: "roblox", label: "Roblox API", icon: Gamepad2 },
 ];
 
 export default function Sidebar({ activeView, onViewChange }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [username, setUsername] = useState<string | null>(null);
+
+  useEffect(() => {
+    const stored = typeof window !== "undefined" ? localStorage.getItem("pub_username") : null;
+    setUsername(stored);
+  }, []);
+
+  const isAdmin = username === ADMIN_USERNAME;
+  const navItems = isAdmin ? [...publicNavItems, ...adminNavItems] : publicNavItems;
+
+  const handleLogout = () => {
+    localStorage.removeItem("pub_token");
+    localStorage.removeItem("pub_username");
+    window.location.reload();
+  };
 
   return (
     <motion.aside
@@ -91,18 +116,32 @@ export default function Sidebar({ activeView, onViewChange }: SidebarProps) {
       </nav>
 
       {/* User section */}
-      <div className="p-3 border-t border-white/10">
-        <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-colors">
-          <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center">
-            <User size={16} className="text-accent" />
+      <div className="p-3 border-t border-white/10 space-y-1">
+        {username && (
+          <div className="flex items-center gap-3 px-3 py-2 text-gray-400">
+            <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+              <User size={16} className="text-accent" />
+            </div>
+            {!collapsed && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex-1 min-w-0"
+              >
+                <span className="text-sm font-medium text-white block truncate">{username}</span>
+                {isAdmin && <span className="text-[10px] text-accent/70">admin</span>}
+              </motion.div>
+            )}
           </div>
+        )}
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+        >
+          <LogOut size={18} />
           {!collapsed && (
-            <motion.span
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-sm font-medium"
-            >
-              Account
+            <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm">
+              Log out
             </motion.span>
           )}
         </button>

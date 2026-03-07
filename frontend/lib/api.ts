@@ -29,6 +29,21 @@ async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T
   return res.json();
 }
 
+// Auth
+export function register(username: string, password: string, email?: string) {
+  return request<{ id: string; username: string }>("/api/auth/register", {
+    method: "POST",
+    body: { username, password, email },
+  });
+}
+
+export function login(username: string, password: string) {
+  return request<{ access_token: string; token_type: string }>("/api/auth/login", {
+    method: "POST",
+    body: { username, password },
+  });
+}
+
 // Chat
 export function sendMessage(conversationId: string | null, message: string) {
   return request<{ content: string; conversation_id: string; message_id: string; model_used: string; tokens_in: number; tokens_out: number; latency_ms: number }>("/api/chat", {

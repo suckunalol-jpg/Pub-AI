@@ -39,7 +39,7 @@ const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
 interface TrainingJob {
   id: string;
   type: string;
-  status: "queued" | "running" | "completed" | "failed";
+  status: string;
   progress: number;
   total_steps: number;
   current_step: number;
@@ -59,7 +59,7 @@ interface Dataset {
 interface Model {
   id: string;
   name: string;
-  type: "base" | "finetuned" | "merged";
+  type: string;
   size_mb: number;
   created_at: string;
   dataset_used?: string;
@@ -157,7 +157,7 @@ function FinetuneTab() {
     try {
       const [ds, j] = await Promise.all([api.listDatasets(), api.getTrainingJobs()]);
       setDatasets(ds);
-      setJobs(j.filter((job: TrainingJob) => job.type === "finetune"));
+      setJobs(j.filter((job) => job.type === "finetune") as TrainingJob[]);
     } catch {}
   }, []);
 
