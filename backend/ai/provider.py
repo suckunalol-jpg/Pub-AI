@@ -1,7 +1,7 @@
-"""Pub AI provider -- routes inference to the custom model first,
-falls back to external APIs only when the custom model is unavailable.
+"""Pub AI provider -- serves inference from your custom model only.
 
-Priority order: vLLM (custom model on Railway) > Ollama (local) > external API (Claude/OpenAI)
+Routes: HuggingFace Inference API > Ollama (local)
+No external AI. This is YOUR model.
 """
 
 from __future__ import annotations
@@ -25,16 +25,15 @@ class AIResponse:
     tokens_in: int
     tokens_out: int
     latency_ms: int
-    provider: str = "unknown"
+    provider: str = "pub-ai"
 
 
 class PubAIProvider:
-    """Unified AI provider that prefers the custom Pub AI model.
+    """Serves inference from the custom Pub AI model.
 
-    Inference routing:
-        1. vLLM / HuggingFace Inference API (custom model)
-        2. Ollama (custom model running locally)
-        3. External API fallback (Claude or OpenAI)
+    Routing:
+        1. HuggingFace Inference API (deployed model)
+        2. Ollama (local dev)
     """
 
     def __init__(self):
@@ -48,34 +47,23 @@ class PubAIProvider:
         temperature: float = 0.7,
         max_tokens: int = 4096,
     ) -> AIResponse:
-        """Send messages and get a response. Tries custom model first."""
+        """Send messages to the Pub AI model."""
 
-        # Try vLLM (custom model)
-        if settings.VLLM_HOST:
+        # Try HuggingFace Inference API
+        if settings.HF_INFERENCE_URL:
             try:
-                return await self._vllm(messages, temperature, max_tokens)
+                return await self._huggingface(messages, temperature, max_tokens)
             except Exception as e:
-                logger.debug("vLLM unavailable: %s", e)
+                logger.warning("HuggingFace Inference unavailable: %s", e)
 
-        # Try Ollama (custom model local)
+        # Try Ollama (local)
         if settings.OLLAMA_HOST:
             try:
-                return await self._ollama_custom(messages, temperature, max_tokens)
+                return await self._ollama(messages, temperature, max_tokens)
             except Exception as e:
-                logger.debug("Ollama unavailable: %s", e)
+                logger.warning("Ollama unavailable: %s", e)
 
-        # Fallback to external API
-        provider = settings.AI_PROVIDER.lower()
-        model = model or settings.AI_MODEL
-
-        if provider == "claude":
-            return await self._claude(messages, model, tools, temperature, max_tokens)
-        elif provider == "openai":
-            return await self._openai(messages, model, tools, temperature, max_tokens)
-        elif provider == "ollama":
-            return await self._ollama(messages, model, temperature, max_tokens)
-        else:
-            raise ValueError(f"No AI provider available")
+        raise RuntimeError("Pub AI model is not available. Check HF_INFERENCE_URL or OLLAMA_HOST.")
 
     async def stream(
         self,
@@ -83,16 +71,16 @@ class PubAIProvider:
         temperature: float = 0.7,
         max_tokens: int = 4096,
     ) -> AsyncIterator[str]:
-        """Stream response tokens from the custom model via vLLM or Ollama."""
+        """Stream response tokens from the Pub AI model."""
 
-        # Try vLLM streaming
-        if settings.VLLM_HOST:
+        # Try HuggingFace streaming
+        if settings.HF_INFERENCE_URL:
             try:
-                async for chunk in self._vllm_stream(messages, temperature, max_tokens):
+                async for chunk in self._huggingface_stream(messages, temperature, max_tokens):
                     yield chunk
                 return
             except Exception as e:
-                logger.debug("vLLM stream unavailable: %s", e)
+                logger.warning("HF stream unavailable: %s", e)
 
         # Try Ollama streaming
         if settings.OLLAMA_HOST:
@@ -101,53 +89,40 @@ class PubAIProvider:
                     yield chunk
                 return
             except Exception as e:
-                logger.debug("Ollama stream unavailable: %s", e)
+                logger.warning("Ollama stream unavailable: %s", e)
 
-        # No streaming fallback -- do a full request and yield the result
-        response = await self.chat(messages, temperature=temperature, max_tokens=max_tokens)
-        yield response.content
+        raise RuntimeError("Pub AI model is not available.")
 
-    # ---------- vLLM / HuggingFace Inference API ----------
+    # ---------- HuggingFace Inference API ----------
 
-    def _is_hf_host(self) -> bool:
-        return "huggingface.co" in (settings.VLLM_HOST or "")
-
-    async def _vllm(
+    async def _huggingface(
         self,
         messages: List[Dict[str, str]],
         temperature: float,
         max_tokens: int,
     ) -> AIResponse:
-        headers = {"Content-Type": "application/json"}
-        if settings.VLLM_API_KEY:
-            headers["Authorization"] = f"Bearer {settings.VLLM_API_KEY}"
+        url = settings.HF_INFERENCE_URL.rstrip("/")
+        if "/v1/" not in url:
+            url = f"{url}/v1/chat/completions"
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {settings.HF_API_TOKEN}",
+        }
 
         start = time.perf_counter()
-
-        if self._is_hf_host():
-            # HuggingFace Inference API (text-generation-inference)
-            url = f"{settings.VLLM_HOST}"
-            body: Dict[str, Any] = {
-                "model": settings.VLLM_MODEL_NAME,
+        resp = await self._client.post(
+            url,
+            headers=headers,
+            json={
+                "model": "pub-ai",
                 "messages": messages,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
                 "stream": False,
-            }
-            # HF TGI exposes OpenAI-compatible /v1/chat/completions
-            if "/v1/" not in url:
-                url = f"{url.rstrip('/')}/v1/chat/completions"
-        else:
-            # Standard vLLM server
-            url = f"{settings.VLLM_HOST}/v1/chat/completions"
-            body = {
-                "model": settings.VLLM_MODEL_NAME,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            }
-
-        resp = await self._client.post(url, headers=headers, json=body, timeout=120.0)
+            },
+            timeout=120.0,
+        )
         latency = int((time.perf_counter() - start) * 1000)
         resp.raise_for_status()
         data = resp.json()
@@ -157,14 +132,14 @@ class PubAIProvider:
 
         return AIResponse(
             content=choice["message"]["content"] or "",
-            model=data.get("model", "pub-ai"),
+            model="pub-ai",
             tokens_in=usage.get("prompt_tokens", 0),
             tokens_out=usage.get("completion_tokens", 0),
             latency_ms=latency,
-            provider="huggingface" if self._is_hf_host() else "vllm",
+            provider="huggingface",
         )
 
-    async def _vllm_stream(
+    async def _huggingface_stream(
         self,
         messages: List[Dict[str, str]],
         temperature: float,
@@ -172,23 +147,21 @@ class PubAIProvider:
     ) -> AsyncIterator[str]:
         import json as json_mod
 
-        headers = {"Content-Type": "application/json"}
-        if settings.VLLM_API_KEY:
-            headers["Authorization"] = f"Bearer {settings.VLLM_API_KEY}"
+        url = settings.HF_INFERENCE_URL.rstrip("/")
+        if "/v1/" not in url:
+            url = f"{url}/v1/chat/completions"
 
-        if self._is_hf_host():
-            url = settings.VLLM_HOST.rstrip("/")
-            if "/v1/" not in url:
-                url = f"{url}/v1/chat/completions"
-        else:
-            url = f"{settings.VLLM_HOST}/v1/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {settings.HF_API_TOKEN}",
+        }
 
         async with self._client.stream(
             "POST",
             url,
             headers=headers,
             json={
-                "model": settings.VLLM_MODEL_NAME,
+                "model": "pub-ai",
                 "messages": messages,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
@@ -204,9 +177,9 @@ class PubAIProvider:
                     if "content" in delta:
                         yield delta["content"]
 
-    # ---------- Ollama (custom model local) ----------
+    # ---------- Ollama (local dev) ----------
 
-    async def _ollama_custom(
+    async def _ollama(
         self,
         messages: List[Dict[str, str]],
         temperature: float,
@@ -216,7 +189,7 @@ class PubAIProvider:
         resp = await self._client.post(
             f"{settings.OLLAMA_HOST}/api/chat",
             json={
-                "model": settings.OLLAMA_MODEL_NAME,
+                "model": "pub-ai",
                 "messages": messages,
                 "stream": False,
                 "options": {
@@ -232,7 +205,7 @@ class PubAIProvider:
 
         return AIResponse(
             content=data.get("message", {}).get("content", ""),
-            model=settings.OLLAMA_MODEL_NAME,
+            model="pub-ai",
             tokens_in=data.get("prompt_eval_count", 0),
             tokens_out=data.get("eval_count", 0),
             latency_ms=latency,
@@ -251,7 +224,7 @@ class PubAIProvider:
             "POST",
             f"{settings.OLLAMA_HOST}/api/chat",
             json={
-                "model": settings.OLLAMA_MODEL_NAME,
+                "model": "pub-ai",
                 "messages": messages,
                 "stream": True,
                 "options": {
@@ -269,145 +242,8 @@ class PubAIProvider:
                     if content:
                         yield content
 
-    # ---------- Fallback: Claude ----------
-
-    async def _claude(
-        self,
-        messages: List[Dict[str, str]],
-        model: str,
-        tools: Optional[List[Dict]],
-        temperature: float,
-        max_tokens: int,
-    ) -> AIResponse:
-        system_content = ""
-        chat_messages = []
-        for msg in messages:
-            if msg["role"] == "system":
-                system_content = msg["content"]
-            else:
-                chat_messages.append({"role": msg["role"], "content": msg["content"]})
-
-        body: Dict[str, Any] = {
-            "model": model,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "messages": chat_messages,
-        }
-        if system_content:
-            body["system"] = system_content
-        if tools:
-            body["tools"] = tools
-
-        start = time.perf_counter()
-        resp = await self._client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": settings.AI_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json=body,
-        )
-        latency = int((time.perf_counter() - start) * 1000)
-        resp.raise_for_status()
-        data = resp.json()
-
-        content = ""
-        for block in data.get("content", []):
-            if block.get("type") == "text":
-                content += block["text"]
-
-        return AIResponse(
-            content=content,
-            model=model,
-            tokens_in=data.get("usage", {}).get("input_tokens", 0),
-            tokens_out=data.get("usage", {}).get("output_tokens", 0),
-            latency_ms=latency,
-            provider="claude",
-        )
-
-    # ---------- Fallback: OpenAI ----------
-
-    async def _openai(
-        self,
-        messages: List[Dict[str, str]],
-        model: str,
-        tools: Optional[List[Dict]],
-        temperature: float,
-        max_tokens: int,
-    ) -> AIResponse:
-        body: Dict[str, Any] = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        }
-        if tools:
-            body["tools"] = tools
-
-        start = time.perf_counter()
-        resp = await self._client.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {settings.AI_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json=body,
-        )
-        latency = int((time.perf_counter() - start) * 1000)
-        resp.raise_for_status()
-        data = resp.json()
-
-        choice = data["choices"][0]
-        usage = data.get("usage", {})
-
-        return AIResponse(
-            content=choice["message"]["content"] or "",
-            model=model,
-            tokens_in=usage.get("prompt_tokens", 0),
-            tokens_out=usage.get("completion_tokens", 0),
-            latency_ms=latency,
-            provider="openai",
-        )
-
-    # ---------- Fallback: Ollama (generic, non-custom model) ----------
-
-    async def _ollama(
-        self,
-        messages: List[Dict[str, str]],
-        model: str,
-        temperature: float,
-        max_tokens: int,
-    ) -> AIResponse:
-        start = time.perf_counter()
-        resp = await self._client.post(
-            f"{settings.OLLAMA_HOST}/api/chat",
-            json={
-                "model": model,
-                "messages": messages,
-                "stream": False,
-                "options": {
-                    "temperature": temperature,
-                    "num_predict": max_tokens,
-                },
-            },
-        )
-        latency = int((time.perf_counter() - start) * 1000)
-        resp.raise_for_status()
-        data = resp.json()
-
-        return AIResponse(
-            content=data.get("message", {}).get("content", ""),
-            model=model,
-            tokens_in=data.get("prompt_eval_count", 0),
-            tokens_out=data.get("eval_count", 0),
-            latency_ms=latency,
-            provider="ollama",
-        )
-
     async def close(self):
         await self._client.aclose()
 
 
-# Singleton -- replaces the old AIProvider
 ai_provider = PubAIProvider()

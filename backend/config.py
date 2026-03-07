@@ -9,19 +9,12 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # AI Provider: "claude", "openai", "ollama"
-    AI_PROVIDER: str = "claude"
-    AI_API_KEY: str = ""
-    AI_MODEL: str = "claude-sonnet-4-20250514"
+    # Pub AI Model — HuggingFace Inference API
+    HF_INFERENCE_URL: str = ""
+    HF_API_TOKEN: str = ""
 
-    # Ollama
+    # Pub AI Model — Ollama (local dev)
     OLLAMA_HOST: str = "http://localhost:11434"
-    OLLAMA_MODEL_NAME: str = "pub-ai"
-
-    # vLLM (custom model on Railway or self-hosted)
-    VLLM_HOST: str = ""
-    VLLM_API_KEY: str = ""
-    VLLM_MODEL_NAME: str = "pub-ai"
 
     # Auth
     SECRET_KEY: str = "CHANGE-ME-IN-PRODUCTION"

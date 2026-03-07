@@ -8,20 +8,19 @@ from config import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup — import all models first so SQLAlchemy metadata is populated
     import db.models  # noqa: F401
     from db.database import init_db
     await init_db()
     print(f"[Pub AI] Database initialized")
-    print(f"[Pub AI] AI Provider: {settings.AI_PROVIDER} / {settings.AI_MODEL}")
-
-    # TODO: Initialize Redis connection pool when needed
-    # import redis.asyncio as aioredis
-    # app.state.redis = aioredis.from_url(settings.REDIS_URL)
+    if settings.HF_INFERENCE_URL:
+        print(f"[Pub AI] Model: HuggingFace @ {settings.HF_INFERENCE_URL}")
+    elif settings.OLLAMA_HOST:
+        print(f"[Pub AI] Model: Ollama @ {settings.OLLAMA_HOST}")
+    else:
+        print("[Pub AI] WARNING: No model configured! Set HF_INFERENCE_URL or OLLAMA_HOST")
 
     yield
 
-    # Shutdown
     from ai.provider import ai_provider
     await ai_provider.close()
     print("[Pub AI] Shutdown complete")
@@ -29,7 +28,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Pub AI",
-    description="AI-powered coding assistant with agent orchestration",
+    description="AI-powered coding assistant — custom model, no third-party AI",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -69,10 +68,9 @@ app.include_router(memory_router)
 
 @app.get("/health")
 async def health_check():
-    provider = "huggingface" if settings.VLLM_HOST and "huggingface.co" in settings.VLLM_HOST else settings.AI_PROVIDER
-    model = settings.VLLM_MODEL_NAME if settings.VLLM_HOST else settings.AI_MODEL
+    provider = "huggingface" if settings.HF_INFERENCE_URL else "ollama" if settings.OLLAMA_HOST else "none"
     return {
         "status": "online",
-        "ai_provider": provider,
-        "ai_model": model,
+        "model": "pub-ai",
+        "provider": provider,
     }
