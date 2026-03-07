@@ -1,4 +1,13 @@
-import time
+"""Chat API — wired with Brain (intent classification + RL) and Memory (per-user learning).
+
+Every interaction:
+1. Brain classifies intent and loads adaptive params
+2. Memory retrieves relevant past context for this user
+3. Response is generated with full user context
+4. New memories are extracted and stored
+5. Feedback updates the learning system
+"""
+
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -8,6 +17,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agents.brain import brain
+from agents.memory import memory_system
 from ai.prompts import GENERAL_SYSTEM_PROMPT
 from ai.provider import ai_provider
 from api.auth import get_current_user_from_token
@@ -33,6 +44,7 @@ class ChatResponse(BaseModel):
     tokens_in: int
     tokens_out: int
     latency_ms: int
+    intent: Optional[dict] = None
 
 
 class ConversationSummary(BaseModel):
@@ -101,7 +113,13 @@ async def send_message(
     db.add(user_msg)
     await db.flush()
 
-    # Build message history for AI
+    # --- Brain: classify intent + retrieve memory + get adaptive params ---
+    brain_ctx = await brain.build_context(db, user.id, req.message)
+    intent_info = brain_ctx["intent"]
+    memory_ctx = brain_ctx["memory_context"]
+    adaptive = brain_ctx["adaptive_params"]
+
+    # Build message history
     result = await db.execute(
         select(Message)
         .where(Message.conversation_id == conversation.id)
@@ -109,12 +127,26 @@ async def send_message(
     )
     history = result.scalars().all()
 
-    messages = [{"role": "system", "content": GENERAL_SYSTEM_PROMPT}]
+    # Build system prompt with user memory context
+    system_prompt = GENERAL_SYSTEM_PROMPT
+    if memory_ctx:
+        system_prompt += f"\n\n--- USER MEMORY ---\n{memory_ctx}"
+    if adaptive.get("verbosity") == "concise":
+        system_prompt += "\n\nThis user prefers concise responses. Keep it short."
+    elif adaptive.get("verbosity") == "verbose":
+        system_prompt += "\n\nThis user prefers detailed, thorough responses."
+
+    messages = [{"role": "system", "content": system_prompt}]
     for msg in history:
         messages.append({"role": msg.role, "content": msg.content})
 
-    # Call AI
-    ai_resp = await ai_provider.chat(messages=messages, model=req.model)
+    # Call AI with adaptive params
+    ai_resp = await ai_provider.chat(
+        messages=messages,
+        model=req.model,
+        temperature=adaptive.get("temperature", 0.7),
+        max_tokens=adaptive.get("max_tokens", 4096),
+    )
 
     # Log assistant message
     assistant_msg = Message(
@@ -140,6 +172,7 @@ async def send_message(
         tokens_in=ai_resp.tokens_in,
         tokens_out=ai_resp.tokens_out,
         latency_ms=ai_resp.latency_ms,
+        intent=intent_info,
     )
 
 
@@ -188,7 +221,8 @@ async def submit_feedback(
 ):
     # Verify message exists
     result = await db.execute(select(Message).where(Message.id == req.message_id))
-    if not result.scalar_one_or_none():
+    msg = result.scalar_one_or_none()
+    if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
 
     feedback = Feedback(
@@ -198,4 +232,17 @@ async def submit_feedback(
         comment=req.comment,
     )
     db.add(feedback)
-    return {"detail": "Feedback submitted"}
+
+    # --- Learn from feedback ---
+    await memory_system.learn_from_feedback(
+        db=db,
+        user_id=user.id,
+        message_id=req.message_id,
+        rating=req.rating,
+        conversation_id=msg.conversation_id,
+    )
+
+    # Invalidate brain cache so it reloads priors
+    brain.invalidate_user_cache(user.id)
+
+    return {"detail": "Feedback submitted and learned from"}

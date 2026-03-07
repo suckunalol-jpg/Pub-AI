@@ -1,3 +1,9 @@
+"""Agent orchestrator — manages lifecycle, spawning, and coordination.
+
+Wires in the Brain (intent classification + learning) and Memory (per-user context)
+systems so every agent benefits from learned user preferences.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +19,7 @@ from db.models import AgentSession
 
 
 class Orchestrator:
-    """Manages agent lifecycle: spawn, message, stop."""
+    """Manages agent lifecycle: spawn, message, stop, coordinate."""
 
     def __init__(self):
         self._agents: Dict[uuid.UUID, BaseAgent] = {}
@@ -27,6 +33,7 @@ class Orchestrator:
         conversation_id: uuid.UUID,
         config: dict = {},
         parent_id: Optional[uuid.UUID] = None,
+        user_id: Optional[uuid.UUID] = None,
     ) -> AgentSession:
         agent_id = uuid.uuid4()
         name = f"{agent_type}-{str(agent_id)[:8]}"
@@ -44,9 +51,32 @@ class Orchestrator:
         db.add(session)
         await db.flush()
 
-        # Create agent instance
-        context = AgentContext(task=task, config=config, parent_id=parent_id)
-        agent = BaseAgent(agent_id=agent_id, agent_type=agent_type, name=name, context=context)
+        # Build context with memory if user_id available
+        memory_context = ""
+        if user_id:
+            try:
+                from agents.memory import memory_system
+                memory_context = await memory_system.build_memory_context(db, user_id, task)
+            except Exception:
+                pass
+
+        context = AgentContext(
+            task=task,
+            config=config,
+            parent_id=parent_id,
+            team_id=config.get("team_id"),
+        )
+
+        # Inject memory into task if available
+        if memory_context:
+            context.task = f"{task}\n\n--- User Context ---\n{memory_context}"
+
+        agent = BaseAgent(
+            agent_id=agent_id,
+            agent_type=agent_type,
+            name=name,
+            context=context,
+        )
         self._agents[agent_id] = agent
 
         # Run agent in background
@@ -59,7 +89,27 @@ class Orchestrator:
         agent = self._agents.get(agent_id)
         if not agent:
             return
-        await agent.run()
+
+        try:
+            result = await agent.run()
+
+            # Update DB record
+            from db.database import async_session
+            async with async_session() as db:
+                try:
+                    stmt = select(AgentSession).where(AgentSession.id == agent_id)
+                    db_result = await db.execute(stmt)
+                    session = db_result.scalar_one_or_none()
+                    if session:
+                        session.status = agent.status
+                        session.result = result
+                        session.completed_at = datetime.utcnow()
+                        await db.commit()
+                except Exception:
+                    await db.rollback()
+        except Exception as e:
+            agent.status = "failed"
+            agent.result = {"error": str(e)}
 
     async def send_message(self, agent_id: uuid.UUID, message: str) -> str:
         agent = self._agents.get(agent_id)
@@ -82,12 +132,15 @@ class Orchestrator:
         result = await db.execute(select(AgentSession).where(AgentSession.id == agent_id))
         session = result.scalar_one_or_none()
         if session:
-            session.status = "failed"
+            session.status = "stopped"
             session.completed_at = datetime.utcnow()
             session.result = agent.result if agent else {"error": "Stopped"}
 
     def get_agent(self, agent_id: uuid.UUID) -> Optional[BaseAgent]:
         return self._agents.get(agent_id)
+
+    def list_agents(self) -> list:
+        return [agent.get_state() for agent in self._agents.values()]
 
 
 orchestrator = Orchestrator()

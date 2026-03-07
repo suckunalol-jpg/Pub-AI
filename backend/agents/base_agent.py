@@ -1,12 +1,28 @@
+"""Base agent with autonomous think-act-observe loop.
+
+Agents can use tools, spawn sub-agents, search the web, execute code,
+scan Roblox games, and coordinate with team members.
+"""
+
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
+import re
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from ai.prompts import AGENT_SYSTEM_PROMPT
 from ai.provider import ai_provider
+
+logger = logging.getLogger(__name__)
+
+# Max iterations before the agent must finish
+MAX_ITERATIONS = 50
+# Max iterations for lightweight agent types
+LIGHTWEIGHT_MAX = 10
 
 
 @dataclass
@@ -15,51 +31,243 @@ class AgentContext:
     conversation_history: List[Dict[str, str]] = field(default_factory=list)
     config: Dict[str, Any] = field(default_factory=dict)
     parent_id: Optional[uuid.UUID] = None
+    team_id: Optional[str] = None
 
 
 class BaseAgent:
-    """Base class for all Pub AI agents."""
+    """Autonomous agent with tool-use loop.
 
-    def __init__(self, agent_id: uuid.UUID, agent_type: str, name: str, context: AgentContext):
+    Loop: Think → Pick Tool → Execute → Observe → Repeat until done.
+    """
+
+    AGENT_TYPES = {
+        "coder": {
+            "role": "Expert software engineer",
+            "specialty": "Write, debug, refactor, and review code. Build full features and apps.",
+        },
+        "researcher": {
+            "role": "Research specialist",
+            "specialty": "Search the web, gather information, read docs, and synthesize findings.",
+        },
+        "reviewer": {
+            "role": "Code reviewer and QA",
+            "specialty": "Review code for bugs, security issues, performance, and best practices. Run tests.",
+        },
+        "executor": {
+            "role": "Task executor",
+            "specialty": "Run commands, execute code, manage builds, deployments, and infrastructure.",
+        },
+        "planner": {
+            "role": "Project planner and architect",
+            "specialty": "Break complex tasks into sub-tasks, design architecture, coordinate sub-agents.",
+        },
+        "roblox": {
+            "role": "Roblox specialist",
+            "specialty": "Roblox/Luau expert. Scan game scripts, build GUIs, analyze exploits, optimize games.",
+        },
+    }
+
+    def __init__(
+        self,
+        agent_id: uuid.UUID,
+        agent_type: str,
+        name: str,
+        context: AgentContext,
+    ):
         self.id = agent_id
         self.agent_type = agent_type
         self.name = name
         self.context = context
         self.status = "running"
         self.result: Optional[Dict] = None
-        self._messages: List[Dict[str, str]] = [
-            {"role": "system", "content": self._build_system_prompt()},
-        ]
+        self.iteration = 0
+        self.tool_history: List[Dict[str, Any]] = []
+        self.started_at = datetime.utcnow()
+        self._messages: List[Dict[str, str]] = []
+
+        # Build initial messages
+        self._messages.append({"role": "system", "content": self._build_system_prompt()})
 
     def _build_system_prompt(self) -> str:
-        return f"{AGENT_SYSTEM_PROMPT}\n\nYour type: {self.agent_type}\nYour name: {self.name}\nYour task: {self.context.task}"
+        from agents.tools import tools_prompt
+
+        type_info = self.AGENT_TYPES.get(self.agent_type, {})
+        role = type_info.get("role", "General agent")
+        specialty = type_info.get("specialty", "Handle tasks as assigned.")
+
+        team_ctx = ""
+        if self.context.team_id:
+            team_ctx = f"\nYou are part of team '{self.context.team_id}'. You can message other agents using message_agent."
+
+        return f"""You are a Pub AI agent — an autonomous AI that completes tasks by using tools.
+
+**Identity**: {self.name} ({role})
+**Specialty**: {specialty}{team_ctx}
+
+**How you work**:
+1. Analyze the task
+2. Break it into steps if complex
+3. Use tools to gather info, write code, execute, search — whatever is needed
+4. Observe results and adapt
+5. When done, output your final result
+
+**Rules**:
+- You have a maximum of {self._max_iterations()} tool calls. Use them wisely.
+- If you need info, search for it — don't guess
+- If a task is too big, use plan_tasks to decompose it, then spawn_agent for sub-tasks
+- If code doesn't work, read the error, fix it, and retry
+- Always verify your work before finishing
+- Be thorough but efficient
+
+{tools_prompt()}"""
+
+    def _max_iterations(self) -> int:
+        if self.agent_type in ("reviewer",):
+            return LIGHTWEIGHT_MAX
+        return MAX_ITERATIONS
 
     async def run(self) -> Dict[str, Any]:
-        """Execute the agent's main task."""
-        self._messages.append({"role": "user", "content": self.context.task})
+        """Main autonomous loop: think → act → observe → repeat."""
+        from agents.tools import execute_tool
 
-        try:
-            response = await ai_provider.chat(messages=self._messages)
-            self._messages.append({"role": "assistant", "content": response.content})
-            self.result = {
-                "content": response.content,
-                "tokens_in": response.tokens_in,
-                "tokens_out": response.tokens_out,
-            }
+        # Start with the task
+        self._messages.append({"role": "user", "content": f"Task: {self.context.task}"})
+
+        max_iter = self._max_iterations()
+
+        while self.status == "running" and self.iteration < max_iter:
+            self.iteration += 1
+
+            # Think: get AI response
+            try:
+                response = await ai_provider.chat(
+                    messages=self._messages,
+                    temperature=0.4,
+                    max_tokens=4096,
+                )
+            except Exception as e:
+                logger.error("Agent %s AI call failed: %s", self.name, e)
+                self.status = "failed"
+                self.result = {"error": f"AI call failed: {e}"}
+                return self.result
+
+            content = response.content
+            self._messages.append({"role": "assistant", "content": content})
+
+            # Check if agent is done
+            result_match = re.search(r"```result\s*\n(.*?)\n```", content, re.DOTALL)
+            if result_match:
+                try:
+                    result_data = json.loads(result_match.group(1))
+                    self.result = {
+                        "content": result_data.get("output", content),
+                        "status": result_data.get("status", "done"),
+                        "iterations": self.iteration,
+                        "tools_used": len(self.tool_history),
+                    }
+                except json.JSONDecodeError:
+                    self.result = {
+                        "content": result_match.group(1),
+                        "iterations": self.iteration,
+                        "tools_used": len(self.tool_history),
+                    }
+                self.status = "completed"
+                return self.result
+
+            # Check for tool calls
+            tool_matches = list(re.finditer(r"```tool\s*\n(.*?)\n```", content, re.DOTALL))
+
+            if not tool_matches:
+                # No tool call and no result block — treat as final answer
+                self.result = {
+                    "content": content,
+                    "iterations": self.iteration,
+                    "tools_used": len(self.tool_history),
+                }
+                self.status = "completed"
+                return self.result
+
+            # Execute tools (parallel if multiple)
+            tool_results = []
+            tool_calls = []
+
+            for match in tool_matches:
+                try:
+                    call = json.loads(match.group(1))
+                    tool_calls.append(call)
+                except json.JSONDecodeError:
+                    tool_results.append(f"Error: Invalid JSON in tool call")
+
+            if tool_calls:
+                # Execute all tool calls in parallel
+                tasks = [
+                    execute_tool(call.get("tool", ""), call.get("params", {}))
+                    for call in tool_calls
+                ]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                for call, result in zip(tool_calls, results):
+                    tool_name = call.get("tool", "unknown")
+                    if isinstance(result, Exception):
+                        output = f"Tool '{tool_name}' error: {result}"
+                        success = False
+                    else:
+                        output = result.output
+                        success = result.success
+
+                    self.tool_history.append({
+                        "iteration": self.iteration,
+                        "tool": tool_name,
+                        "params": call.get("params", {}),
+                        "success": success,
+                        "output_preview": output[:500],
+                    })
+                    tool_results.append(
+                        f"**{tool_name}** ({'OK' if success else 'FAILED'}):\n{output}"
+                    )
+
+            # Feed observations back
+            observation = "Tool results:\n\n" + "\n\n---\n\n".join(tool_results)
+            self._messages.append({"role": "user", "content": observation})
+
+        # Exceeded max iterations
+        if self.status == "running":
             self.status = "completed"
-        except Exception as e:
-            self.result = {"error": str(e)}
-            self.status = "failed"
+            self.result = {
+                "content": "Reached maximum iterations. Last response:\n" + (
+                    self._messages[-1]["content"] if self._messages else ""
+                ),
+                "iterations": self.iteration,
+                "tools_used": len(self.tool_history),
+                "max_iterations_reached": True,
+            }
 
         return self.result
 
     async def handle_message(self, message: str) -> str:
-        """Handle an incoming message while the agent is running."""
+        """Handle an incoming message from another agent or user."""
         self._messages.append({"role": "user", "content": message})
-        response = await ai_provider.chat(messages=self._messages)
+        response = await ai_provider.chat(messages=self._messages, temperature=0.4)
         self._messages.append({"role": "assistant", "content": response.content})
         return response.content
 
     def stop(self):
         self.status = "failed"
         self.result = self.result or {"error": "Stopped by user"}
+
+    def get_state(self) -> Dict[str, Any]:
+        """Return current agent state for monitoring."""
+        return {
+            "id": str(self.id),
+            "name": self.name,
+            "type": self.agent_type,
+            "status": self.status,
+            "iteration": self.iteration,
+            "max_iterations": self._max_iterations(),
+            "tools_used": len(self.tool_history),
+            "tool_history": self.tool_history[-5:],  # Last 5 tool calls
+            "started_at": self.started_at.isoformat(),
+            "result_preview": (
+                self.result.get("content", "")[:200] if self.result else None
+            ),
+        }

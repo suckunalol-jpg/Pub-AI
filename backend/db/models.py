@@ -24,7 +24,7 @@ class GUID(TypeDecorator):
     def load_dialect_impl(self, dialect):
         if dialect.name == "postgresql":
             from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-            return dialect.type_descriptor(PG_GUID)
+            return dialect.type_descriptor(PG_UUID(as_uuid=True))
         return dialect.type_descriptor(CHAR(36))
 
     def process_bind_param(self, value, dialect):
@@ -63,6 +63,7 @@ class User(Base):
     workflows = relationship("Workflow", back_populates="user")
     knowledge_entries = relationship("KnowledgeEntry", back_populates="user")
     execution_logs = relationship("ExecutionLog", back_populates="user")
+    memories = relationship("UserMemory", back_populates="user")
 
 
 # ---------- API Keys ----------
@@ -218,3 +219,54 @@ class ExecutionLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="execution_logs")
+
+
+# ---------- User Memory (per-user learning) ----------
+
+class UserMemory(Base):
+    __tablename__ = "user_memories"
+
+    id = Column(GUID, primary_key=True, default=gen_uuid)
+    user_id = Column(GUID, ForeignKey("users.id"), nullable=False)
+    memory_type = Column(String(50), nullable=False)  # preference/fact/skill/pattern/correction
+    key = Column(String(255), nullable=False)
+    value = Column(Text, nullable=False)
+    confidence = Column(Integer, default=50)  # 0-100 confidence score
+    access_count = Column(Integer, default=0)
+    last_accessed = Column(DateTime, default=datetime.utcnow)
+    source_message_id = Column(GUID, ForeignKey("messages.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="memories")
+
+
+# ---------- Intent Log (Bayesian learning) ----------
+
+class IntentLog(Base):
+    __tablename__ = "intent_logs"
+
+    id = Column(GUID, primary_key=True, default=gen_uuid)
+    user_id = Column(GUID, ForeignKey("users.id"), nullable=False)
+    message_content = Column(Text, nullable=False)
+    predicted_intent = Column(String(100), nullable=False)
+    actual_intent = Column(String(100), nullable=True)  # corrected by feedback
+    confidence = Column(Integer, default=50)
+    was_correct = Column(Boolean, nullable=True)
+    features = Column(JSON, default=dict)  # extracted features for learning
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# ---------- Learning Signal (RL reward tracking) ----------
+
+class LearningSignal(Base):
+    __tablename__ = "learning_signals"
+
+    id = Column(GUID, primary_key=True, default=gen_uuid)
+    user_id = Column(GUID, ForeignKey("users.id"), nullable=False)
+    conversation_id = Column(GUID, ForeignKey("conversations.id"), nullable=False)
+    action_type = Column(String(50), nullable=False)  # tool_use/response/code_gen/agent_spawn
+    action_detail = Column(JSON, default=dict)
+    reward = Column(Integer, default=0)  # -1 to +1 mapped from feedback
+    context_hash = Column(String(64), nullable=True)  # hash of context for dedup
+    created_at = Column(DateTime, default=datetime.utcnow)

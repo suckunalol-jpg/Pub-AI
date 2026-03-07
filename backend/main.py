@@ -53,6 +53,7 @@ from api.execute import router as execute_router
 from api.roblox import router as roblox_router
 from api.knowledge import router as knowledge_router
 from api.training import router as training_router
+from api.memory import router as memory_router
 
 app.include_router(auth_router)
 app.include_router(chat_router)
@@ -63,6 +64,7 @@ app.include_router(execute_router)
 app.include_router(roblox_router)
 app.include_router(knowledge_router)
 app.include_router(training_router)
+app.include_router(memory_router)
 
 
 @app.get("/health")

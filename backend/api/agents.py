@@ -1,3 +1,5 @@
+"""Agent API — spawn, manage, and monitor autonomous agents."""
+
 import uuid
 from typing import Optional
 
@@ -17,7 +19,7 @@ router = APIRouter(prefix="/api/agents", tags=["agents"])
 # ---------- Schemas ----------
 
 class SpawnRequest(BaseModel):
-    agent_type: str  # coder/researcher/executor/roblox
+    agent_type: str  # coder/researcher/reviewer/executor/planner/roblox
     task: str
     conversation_id: Optional[uuid.UUID] = None
     config: Optional[dict] = None
@@ -51,8 +53,17 @@ async def spawn_agent(
         task=req.task,
         conversation_id=req.conversation_id or uuid.uuid4(),
         config=req.config or {},
+        user_id=user.id,
     )
     return session
+
+
+@router.get("/list")
+async def list_agents(
+    user: User = Depends(get_current_user_from_token),
+):
+    """List all currently active agents with their state."""
+    return orchestrator.list_agents()
 
 
 @router.get("/{agent_id}", response_model=AgentStatus)
@@ -61,11 +72,35 @@ async def get_agent_status(
     user: User = Depends(get_current_user_from_token),
     db: AsyncSession = Depends(get_db),
 ):
+    # Check live agent first
+    agent = orchestrator.get_agent(agent_id)
+    if agent:
+        return AgentStatus(
+            id=agent.id,
+            agent_type=agent.agent_type,
+            agent_name=agent.name,
+            status=agent.status,
+            result=agent.result,
+        )
+
+    # Fall back to DB
     result = await db.execute(select(AgentSession).where(AgentSession.id == agent_id))
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(status_code=404, detail="Agent not found")
     return session
+
+
+@router.get("/{agent_id}/state")
+async def get_agent_detailed_state(
+    agent_id: uuid.UUID,
+    user: User = Depends(get_current_user_from_token),
+):
+    """Get detailed agent state including tool history and iterations."""
+    agent = orchestrator.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found or finished")
+    return agent.get_state()
 
 
 @router.post("/{agent_id}/message")
