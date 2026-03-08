@@ -270,3 +270,28 @@ class LearningSignal(Base):
     reward = Column(Integer, default=0)  # -1 to +1 mapped from feedback
     context_hash = Column(String(64), nullable=True)  # hash of context for dedup
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# ---------- Registered Models (Multi-Model Support) ----------
+
+class RegisteredModel(Base):
+    """Tracks registered AI model endpoints that Pub AI can route inference to.
+
+    provider_type:
+        - "huggingface"       : HuggingFace Inference API (OpenAI-compatible /v1/chat/completions)
+        - "ollama"            : Ollama local server (/api/chat)
+        - "openai-compatible" : Any server exposing the OpenAI chat completions API
+    """
+    __tablename__ = "registered_models"
+
+    id = Column(GUID, primary_key=True, default=gen_uuid)
+    name = Column(String(100), unique=True, nullable=False)
+    provider_type = Column(String(30), nullable=False)  # huggingface / ollama / openai-compatible
+    endpoint_url = Column(String(500), nullable=False)
+    api_token = Column(String(500), nullable=True)  # nullable for local models (e.g. Ollama)
+    model_identifier = Column(String(200), nullable=False)  # model name sent to the endpoint
+    is_active = Column(Boolean, default=False)  # only one model should be active at a time
+    config = Column(JSON, default=dict)  # extra provider-specific config (e.g. default temp)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = Column(GUID, ForeignKey("users.id"), nullable=True)

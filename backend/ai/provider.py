@@ -1,7 +1,13 @@
-"""Pub AI provider -- serves inference from your custom model only.
+"""Pub AI provider -- multi-model inference router.
 
-Routes: HuggingFace Inference API > Ollama (local)
-No external AI. This is YOUR model.
+Supports registered models from the DB (RegisteredModel table).
+Falls back to bootstrap defaults from env vars (HF_INFERENCE_URL / OLLAMA_HOST)
+when no models are registered yet.
+
+Provider types:
+    - "huggingface"        : HuggingFace Inference API (OpenAI-compat /v1/chat/completions)
+    - "ollama"             : Ollama local server (/api/chat)
+    - "openai-compatible"  : Any OpenAI-compatible chat completions API
 """
 
 from __future__ import annotations
@@ -28,16 +34,124 @@ class AIResponse:
     provider: str = "pub-ai"
 
 
-class PubAIProvider:
-    """Serves inference from the custom Pub AI model.
+@dataclass
+class _ResolvedModel:
+    """Internal container for a fully-resolved model's connection details."""
+    name: str
+    provider_type: str  # huggingface / ollama / openai-compatible
+    endpoint_url: str
+    api_token: Optional[str]
+    model_identifier: str
+    config: dict
 
-    Routing:
-        1. HuggingFace Inference API (deployed model)
-        2. Ollama (local dev)
+
+class PubAIProvider:
+    """Routes inference to whichever registered model is requested (or the active default).
+
+    Maintains an in-memory cache of models loaded from the DB.
+    Call invalidate_cache() after any DB write that changes RegisteredModel rows.
     """
 
     def __init__(self):
         self._client = httpx.AsyncClient(timeout=120.0)
+        # Cache: name -> _ResolvedModel.  None means "not yet loaded".
+        self._cache: Optional[Dict[str, _ResolvedModel]] = None
+        self._active_name: Optional[str] = None
+
+    # ------------------------------------------------------------------
+    # Cache management
+    # ------------------------------------------------------------------
+
+    def invalidate_cache(self) -> None:
+        """Call after any RegisteredModel DB mutation."""
+        self._cache = None
+        self._active_name = None
+
+    async def _ensure_cache(self) -> None:
+        """Lazy-load the model registry from the DB if cache is empty."""
+        if self._cache is not None:
+            return
+
+        self._cache = {}
+        self._active_name = None
+
+        try:
+            from db.database import async_session
+            from db.models import RegisteredModel
+            from sqlalchemy import select
+
+            async with async_session() as session:
+                result = await session.execute(select(RegisteredModel))
+                rows = result.scalars().all()
+
+            for row in rows:
+                resolved = _ResolvedModel(
+                    name=row.name,
+                    provider_type=row.provider_type,
+                    endpoint_url=row.endpoint_url,
+                    api_token=row.api_token,
+                    model_identifier=row.model_identifier,
+                    config=row.config or {},
+                )
+                self._cache[row.name] = resolved
+                if row.is_active:
+                    self._active_name = row.name
+
+            logger.info(
+                "Model registry loaded: %d model(s), active=%s",
+                len(self._cache),
+                self._active_name or "(none)",
+            )
+        except Exception as e:
+            # During early startup the DB may not be ready yet; fall through to bootstrap.
+            logger.debug("Could not load model registry from DB: %s", e)
+
+    async def _resolve(self, model_name: Optional[str] = None) -> _ResolvedModel:
+        """Resolve a model name to its connection details.
+
+        Priority:
+            1. Explicit model_name parameter (look up in registry)
+            2. Active model in registry (is_active=True)
+            3. Bootstrap defaults from env vars (HF_INFERENCE_URL / OLLAMA_HOST)
+        """
+        await self._ensure_cache()
+
+        # 1. Explicit name requested
+        if model_name and self._cache and model_name in self._cache:
+            return self._cache[model_name]
+
+        # 2. Active default from registry
+        if self._active_name and self._cache and self._active_name in self._cache:
+            return self._cache[self._active_name]
+
+        # 3. Bootstrap: build a temporary _ResolvedModel from env vars
+        if settings.HF_INFERENCE_URL:
+            return _ResolvedModel(
+                name="pub-ai",
+                provider_type="huggingface",
+                endpoint_url=settings.HF_INFERENCE_URL,
+                api_token=settings.HF_API_TOKEN or None,
+                model_identifier="pub-ai",
+                config={},
+            )
+
+        if settings.OLLAMA_HOST:
+            return _ResolvedModel(
+                name="pub-ai",
+                provider_type="ollama",
+                endpoint_url=settings.OLLAMA_HOST,
+                api_token=None,
+                model_identifier="pub-ai",
+                config={},
+            )
+
+        raise RuntimeError(
+            "No model available. Register a model via /api/models or set HF_INFERENCE_URL / OLLAMA_HOST."
+        )
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
     async def chat(
         self,
@@ -47,75 +161,64 @@ class PubAIProvider:
         temperature: float = 0.7,
         max_tokens: int = 4096,
     ) -> AIResponse:
-        """Send messages to the Pub AI model."""
+        """Send a chat completion request to the resolved model."""
+        resolved = await self._resolve(model)
 
-        # Try HuggingFace Inference API
-        if settings.HF_INFERENCE_URL:
-            try:
-                return await self._huggingface(messages, temperature, max_tokens)
-            except Exception as e:
-                logger.warning("HuggingFace Inference unavailable: %s", e)
+        # Allow per-model config overrides for temperature / max_tokens
+        temperature = resolved.config.get("default_temperature", temperature)
+        max_tokens = resolved.config.get("default_max_tokens", max_tokens)
 
-        # Try Ollama (local)
-        if settings.OLLAMA_HOST:
-            try:
-                return await self._ollama(messages, temperature, max_tokens)
-            except Exception as e:
-                logger.warning("Ollama unavailable: %s", e)
-
-        raise RuntimeError("Pub AI model is not available. Check HF_INFERENCE_URL or OLLAMA_HOST.")
+        if resolved.provider_type == "ollama":
+            return await self._ollama_chat(resolved, messages, temperature, max_tokens)
+        else:
+            # huggingface and openai-compatible share the same OpenAI API shape
+            return await self._openai_chat(resolved, messages, temperature, max_tokens)
 
     async def stream(
         self,
         messages: List[Dict[str, str]],
+        model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
     ) -> AsyncIterator[str]:
-        """Stream response tokens from the Pub AI model."""
+        """Stream response tokens from the resolved model."""
+        resolved = await self._resolve(model)
 
-        # Try HuggingFace streaming
-        if settings.HF_INFERENCE_URL:
-            try:
-                async for chunk in self._huggingface_stream(messages, temperature, max_tokens):
-                    yield chunk
-                return
-            except Exception as e:
-                logger.warning("HF stream unavailable: %s", e)
+        temperature = resolved.config.get("default_temperature", temperature)
+        max_tokens = resolved.config.get("default_max_tokens", max_tokens)
 
-        # Try Ollama streaming
-        if settings.OLLAMA_HOST:
-            try:
-                async for chunk in self._ollama_stream(messages, temperature, max_tokens):
-                    yield chunk
-                return
-            except Exception as e:
-                logger.warning("Ollama stream unavailable: %s", e)
+        if resolved.provider_type == "ollama":
+            async for chunk in self._ollama_stream(resolved, messages, temperature, max_tokens):
+                yield chunk
+        else:
+            async for chunk in self._openai_stream(resolved, messages, temperature, max_tokens):
+                yield chunk
 
-        raise RuntimeError("Pub AI model is not available.")
+    # ------------------------------------------------------------------
+    # OpenAI-compatible (covers HuggingFace + openai-compatible)
+    # ------------------------------------------------------------------
 
-    # ---------- HuggingFace Inference API ----------
-
-    async def _huggingface(
+    async def _openai_chat(
         self,
+        model: _ResolvedModel,
         messages: List[Dict[str, str]],
         temperature: float,
         max_tokens: int,
     ) -> AIResponse:
-        url = settings.HF_INFERENCE_URL.rstrip("/")
+        url = model.endpoint_url.rstrip("/")
         if "/v1/" not in url:
             url = f"{url}/v1/chat/completions"
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {settings.HF_API_TOKEN}",
-        }
+        headers: Dict[str, str] = {"Content-Type": "application/json"}
+        if model.api_token:
+            headers["Authorization"] = f"Bearer {model.api_token}"
 
         start = time.perf_counter()
         resp = await self._client.post(
             url,
             headers=headers,
             json={
-                "model": "pub-ai",
+                "model": model.model_identifier,
                 "messages": messages,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
@@ -132,36 +235,36 @@ class PubAIProvider:
 
         return AIResponse(
             content=choice["message"]["content"] or "",
-            model="pub-ai",
+            model=model.name,
             tokens_in=usage.get("prompt_tokens", 0),
             tokens_out=usage.get("completion_tokens", 0),
             latency_ms=latency,
-            provider="huggingface",
+            provider=model.provider_type,
         )
 
-    async def _huggingface_stream(
+    async def _openai_stream(
         self,
+        model: _ResolvedModel,
         messages: List[Dict[str, str]],
         temperature: float,
         max_tokens: int,
     ) -> AsyncIterator[str]:
         import json as json_mod
 
-        url = settings.HF_INFERENCE_URL.rstrip("/")
+        url = model.endpoint_url.rstrip("/")
         if "/v1/" not in url:
             url = f"{url}/v1/chat/completions"
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {settings.HF_API_TOKEN}",
-        }
+        headers: Dict[str, str] = {"Content-Type": "application/json"}
+        if model.api_token:
+            headers["Authorization"] = f"Bearer {model.api_token}"
 
         async with self._client.stream(
             "POST",
             url,
             headers=headers,
             json={
-                "model": "pub-ai",
+                "model": model.model_identifier,
                 "messages": messages,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
@@ -177,19 +280,22 @@ class PubAIProvider:
                     if "content" in delta:
                         yield delta["content"]
 
-    # ---------- Ollama (local dev) ----------
+    # ------------------------------------------------------------------
+    # Ollama
+    # ------------------------------------------------------------------
 
-    async def _ollama(
+    async def _ollama_chat(
         self,
+        model: _ResolvedModel,
         messages: List[Dict[str, str]],
         temperature: float,
         max_tokens: int,
     ) -> AIResponse:
         start = time.perf_counter()
         resp = await self._client.post(
-            f"{settings.OLLAMA_HOST}/api/chat",
+            f"{model.endpoint_url.rstrip('/')}/api/chat",
             json={
-                "model": "pub-ai",
+                "model": model.model_identifier,
                 "messages": messages,
                 "stream": False,
                 "options": {
@@ -205,7 +311,7 @@ class PubAIProvider:
 
         return AIResponse(
             content=data.get("message", {}).get("content", ""),
-            model="pub-ai",
+            model=model.name,
             tokens_in=data.get("prompt_eval_count", 0),
             tokens_out=data.get("eval_count", 0),
             latency_ms=latency,
@@ -214,6 +320,7 @@ class PubAIProvider:
 
     async def _ollama_stream(
         self,
+        model: _ResolvedModel,
         messages: List[Dict[str, str]],
         temperature: float,
         max_tokens: int,
@@ -222,9 +329,9 @@ class PubAIProvider:
 
         async with self._client.stream(
             "POST",
-            f"{settings.OLLAMA_HOST}/api/chat",
+            f"{model.endpoint_url.rstrip('/')}/api/chat",
             json={
-                "model": "pub-ai",
+                "model": model.model_identifier,
                 "messages": messages,
                 "stream": True,
                 "options": {
@@ -241,6 +348,10 @@ class PubAIProvider:
                     content = chunk.get("message", {}).get("content", "")
                     if content:
                         yield content
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
 
     async def close(self):
         await self._client.aclose()

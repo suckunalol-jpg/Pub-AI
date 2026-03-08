@@ -18,9 +18,11 @@ export interface Message {
 interface ChatMessageProps {
   message: Message;
   onFeedback?: (messageId: string, rating: 1 | 2) => void;
+  /** When true, shows a blinking cursor at the end of the message */
+  isStreaming?: boolean;
 }
 
-export default function ChatMessage({ message, onFeedback }: ChatMessageProps) {
+export default function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessageProps) {
   const [feedback, setFeedback] = useState<1 | 2 | null>(null);
   const isUser = message.role === "user";
 
@@ -96,6 +98,9 @@ export default function ChatMessage({ message, onFeedback }: ChatMessageProps) {
           >
             {message.content}
           </ReactMarkdown>
+          {isStreaming && (
+            <span className="inline-block w-1.5 h-4 bg-accent/70 rounded-sm ml-0.5 align-middle animate-typewriter-cursor" />
+          )}
         </div>
 
         {/* Footer: timestamp + feedback */}

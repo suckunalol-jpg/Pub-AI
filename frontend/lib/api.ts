@@ -44,7 +44,135 @@ export function login(username: string, password: string) {
   });
 }
 
-// Chat
+// Chat — SSE streaming types and function
+
+export type StreamPhase = "thinking" | "coding" | "executing" | "searching" | "reviewing";
+
+export interface StreamEvent {
+  type: "status" | "token" | "code" | "done" | "error";
+  data: Record<string, unknown>;
+}
+
+export interface StreamCallbacks {
+  onStatus?: (phase: StreamPhase, conversationId?: string) => void;
+  onToken?: (content: string) => void;
+  onCode?: (language: string, content: string) => void;
+  onDone?: (messageId: string, model: string, conversationId: string, latencyMs: number) => void;
+  onError?: (detail: string) => void;
+}
+
+/**
+ * Stream a chat message via SSE. Returns an AbortController to cancel the stream.
+ */
+export function streamMessage(
+  conversationId: string | null,
+  message: string,
+  callbacks: StreamCallbacks
+): AbortController {
+  const controller = new AbortController();
+  const token = typeof window !== "undefined" ? localStorage.getItem("pub_token") : null;
+
+  // Fire-and-forget async — caller controls lifecycle via AbortController
+  (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/chat/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ conversation_id: conversationId, message }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        callbacks.onError?.(err.detail || `Stream failed: ${res.status}`);
+        return;
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        callbacks.onError?.("ReadableStream not supported");
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse complete SSE events from the buffer
+        const lines = buffer.split("\n");
+        buffer = "";
+
+        let currentEvent = "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            currentEvent = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            const rawData = line.slice(6);
+            try {
+              const data = JSON.parse(rawData);
+              switch (currentEvent) {
+                case "status":
+                  callbacks.onStatus?.(
+                    data.phase as StreamPhase,
+                    data.conversation_id as string | undefined
+                  );
+                  break;
+                case "token":
+                  callbacks.onToken?.(data.content as string);
+                  break;
+                case "code":
+                  callbacks.onCode?.(
+                    data.language as string,
+                    data.content as string
+                  );
+                  break;
+                case "done":
+                  callbacks.onDone?.(
+                    data.message_id as string,
+                    data.model as string,
+                    data.conversation_id as string,
+                    data.latency_ms as number
+                  );
+                  break;
+                case "error":
+                  callbacks.onError?.(data.detail as string);
+                  break;
+              }
+            } catch {
+              // Incomplete JSON — put back into buffer
+              buffer = line + "\n";
+            }
+            currentEvent = "";
+          } else if (line === "") {
+            // Empty line = event boundary, reset
+            currentEvent = "";
+          } else {
+            // Incomplete line — put back into buffer
+            buffer += line + "\n";
+          }
+        }
+      }
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        // User cancelled — not an error
+        return;
+      }
+      callbacks.onError?.(err instanceof Error ? err.message : "Stream connection failed");
+    }
+  })();
+
+  return controller;
+}
+
+// Chat — non-streaming (legacy)
 export function sendMessage(conversationId: string | null, message: string) {
   return request<{ content: string; conversation_id: string; message_id: string; model_used: string; tokens_in: number; tokens_out: number; latency_ms: number }>("/api/chat", {
     method: "POST",

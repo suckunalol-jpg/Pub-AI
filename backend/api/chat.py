@@ -8,11 +8,13 @@ Every interaction:
 5. Feedback updates the learning system
 """
 
+import json
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import AsyncGenerator, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -173,6 +175,223 @@ async def send_message(
         tokens_out=ai_resp.tokens_out,
         latency_ms=ai_resp.latency_ms,
         intent=intent_info,
+    )
+
+
+# ---------- SSE Streaming ----------
+
+def _sse_event(event: str, data: dict) -> str:
+    """Format a single SSE event line."""
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+def _detect_phase(token: str, buffer: str, in_code_block: bool) -> tuple[str | None, bool]:
+    """Detect phase transitions by inspecting accumulated content.
+
+    Returns (new_phase_or_None, updated_in_code_block).
+    """
+    combined = buffer + token
+
+    # Check for code fence toggle (``` marks start/end of code block)
+    fence_count = token.count("```")
+    toggled = in_code_block
+    for _ in range(fence_count):
+        toggled = not toggled
+
+    if toggled != in_code_block:
+        phase = "coding" if toggled else "thinking"
+        return phase, toggled
+
+    # Detect tool-call / execution patterns in the token stream
+    lower_token = token.lower()
+    if any(kw in lower_token for kw in ["executing", "running", "$ ", "output:"]):
+        return "executing", in_code_block
+    if any(kw in lower_token for kw in ["searching", "looking up", "retrieving"]):
+        return "searching", in_code_block
+
+    return None, in_code_block
+
+
+@router.post("/stream")
+async def stream_message(
+    req: ChatRequest,
+    request: Request,
+    user: User = Depends(get_current_user_from_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """SSE streaming endpoint for real-time chat responses.
+
+    Emits events:
+      - status: {phase: thinking|coding|executing|searching}
+      - token:  {content: str}
+      - code:   {language: str, content: str}
+      - done:   {message_id: str, model: str}
+      - error:  {detail: str}
+    """
+
+    # --- Resolve / create conversation ---
+    if req.conversation_id:
+        result = await db.execute(
+            select(Conversation).where(
+                Conversation.id == req.conversation_id,
+                Conversation.user_id == user.id,
+            )
+        )
+        conversation = result.scalar_one_or_none()
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+    else:
+        conversation = Conversation(
+            user_id=user.id,
+            title=req.message[:80] if req.message else "New Chat",
+            platform="web",
+        )
+        db.add(conversation)
+        await db.flush()
+
+    # Log user message
+    user_msg = Message(
+        conversation_id=conversation.id,
+        role="user",
+        content=req.message,
+    )
+    db.add(user_msg)
+    await db.flush()
+
+    # --- Brain context (same as non-streaming) ---
+    brain_ctx = await brain.build_context(db, user.id, req.message)
+    intent_info = brain_ctx["intent"]
+    memory_ctx = brain_ctx["memory_context"]
+    adaptive = brain_ctx["adaptive_params"]
+
+    # Build message history
+    result = await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation.id)
+        .order_by(Message.created_at)
+    )
+    history = result.scalars().all()
+
+    system_prompt = GENERAL_SYSTEM_PROMPT
+    if memory_ctx:
+        system_prompt += f"\n\n--- USER MEMORY ---\n{memory_ctx}"
+    if adaptive.get("verbosity") == "concise":
+        system_prompt += "\n\nThis user prefers concise responses. Keep it short."
+    elif adaptive.get("verbosity") == "verbose":
+        system_prompt += "\n\nThis user prefers detailed, thorough responses."
+
+    messages = [{"role": "system", "content": system_prompt}]
+    for msg in history:
+        messages.append({"role": msg.role, "content": msg.content})
+
+    # Capture conversation_id to send in the first event
+    conv_id_str = str(conversation.id)
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        """Generates SSE events from the AI token stream."""
+        import time
+
+        full_content = ""
+        current_phase = "thinking"
+        in_code_block = False
+        code_buffer = ""
+        code_language = ""
+        start_time = time.perf_counter()
+        token_count = 0
+
+        # Initial status + conversation_id
+        yield _sse_event("status", {"phase": "thinking", "conversation_id": conv_id_str})
+
+        try:
+            async for token in ai_provider.stream(
+                messages=messages,
+                temperature=adaptive.get("temperature", 0.7),
+                max_tokens=adaptive.get("max_tokens", 4096),
+            ):
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+
+                full_content += token
+                token_count += 1
+
+                # Phase detection
+                new_phase, in_code_block = _detect_phase(token, full_content, in_code_block)
+                if new_phase and new_phase != current_phase:
+                    # If leaving coding phase, emit the accumulated code block
+                    if current_phase == "coding" and code_buffer.strip():
+                        yield _sse_event("code", {
+                            "language": code_language or "text",
+                            "content": code_buffer.strip(),
+                        })
+                        code_buffer = ""
+                        code_language = ""
+
+                    current_phase = new_phase
+                    yield _sse_event("status", {"phase": current_phase})
+
+                # Accumulate code content when in coding phase
+                if in_code_block:
+                    # Detect language from first line after opening fence
+                    if not code_language and code_buffer == "" and token.strip() and "```" not in token:
+                        # The first token after ``` is often the language identifier
+                        stripped = token.strip()
+                        if stripped.isalpha() and len(stripped) < 20:
+                            code_language = stripped
+                        else:
+                            code_buffer += token
+                    else:
+                        # Filter out the fence markers themselves
+                        cleaned = token.replace("```", "")
+                        code_buffer += cleaned
+                else:
+                    # Emit content tokens (filter out fence markers)
+                    emit_token = token.replace("```", "")
+                    if emit_token:
+                        yield _sse_event("token", {"content": emit_token})
+
+            # Emit any remaining code buffer
+            if code_buffer.strip():
+                yield _sse_event("code", {
+                    "language": code_language or "text",
+                    "content": code_buffer.strip(),
+                })
+
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+
+            # Save assistant message to DB
+            assistant_msg = Message(
+                conversation_id=conversation.id,
+                role="assistant",
+                content=full_content,
+                model_used="pub-ai",
+                tokens_in=0,  # Not available from streaming
+                tokens_out=token_count,
+                latency_ms=latency_ms,
+            )
+            db.add(assistant_msg)
+            conversation.updated_at = datetime.utcnow()
+            await db.flush()
+            await db.commit()
+
+            yield _sse_event("done", {
+                "message_id": str(assistant_msg.id),
+                "model": "pub-ai",
+                "conversation_id": conv_id_str,
+                "latency_ms": latency_ms,
+            })
+
+        except Exception as e:
+            yield _sse_event("error", {"detail": str(e)})
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
     )
 
 

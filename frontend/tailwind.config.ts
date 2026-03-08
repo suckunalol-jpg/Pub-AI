@@ -35,6 +35,8 @@ const config: Config = {
         "fade-in": "fadeIn 0.3s ease-out",
         "slide-up": "slideUp 0.3s ease-out",
         "pulse-glow": "pulseGlow 2s ease-in-out infinite",
+        "terminal-blink": "terminalBlink 1s step-end infinite",
+        "typewriter-cursor": "typewriterCursor 0.6s step-end infinite",
       },
       keyframes: {
         fadeIn: {
@@ -48,6 +50,14 @@ const config: Config = {
         pulseGlow: {
           "0%, 100%": { boxShadow: "0 0 5px #00aaff20" },
           "50%": { boxShadow: "0 0 20px #00aaff40" },
+        },
+        terminalBlink: {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0" },
+        },
+        typewriterCursor: {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0" },
         },
       },
     },

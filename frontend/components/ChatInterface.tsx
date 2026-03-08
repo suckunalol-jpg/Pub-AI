@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Plus, Loader2 } from "lucide-react";
+import { Send, Plus, Square } from "lucide-react";
 import ChatMessage, { type Message } from "./ChatMessage";
+import ActionIndicator, { type AiPhase } from "./ActionIndicator";
 import GlassCard from "./GlassCard";
 import { generateId } from "@/lib/utils";
 import * as api from "@/lib/api";
@@ -13,13 +14,20 @@ export default function ChatInterface() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+
+  // Streaming state
+  const [aiPhase, setAiPhase] = useState<AiPhase>("thinking");
+  const [streamingContent, setStreamingContent] = useState("");
+  const [liveCode, setLiveCode] = useState("");
+  const abortRef = useRef<AbortController | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom on new messages or streaming content
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, streamingContent]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -30,13 +38,46 @@ export default function ChatInterface() {
     }
   }, [input]);
 
+  // Cleanup abort controller on unmount
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
   const handleNewChat = () => {
+    abortRef.current?.abort();
     setMessages([]);
     setConversationId(null);
     setInput("");
+    setIsLoading(false);
+    setStreamingContent("");
+    setLiveCode("");
   };
 
-  const handleSend = async () => {
+  const handleStop = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+
+    // Finalize whatever content was streamed so far
+    setStreamingContent((prev) => {
+      if (prev.trim()) {
+        const finalMsg: Message = {
+          id: generateId(),
+          role: "assistant",
+          content: prev + "\n\n*(generation stopped)*",
+          timestamp: new Date(),
+        };
+        setMessages((msgs) => [...msgs, finalMsg]);
+      }
+      return "";
+    });
+
+    setIsLoading(false);
+    setLiveCode("");
+  }, []);
+
+  const handleSend = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed || isLoading) return;
 
@@ -50,30 +91,70 @@ export default function ChatInterface() {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
+    setAiPhase("thinking");
+    setStreamingContent("");
+    setLiveCode("");
 
-    try {
-      const res = await api.sendMessage(conversationId, trimmed);
-      setConversationId(res.conversation_id);
+    // Accumulate tokens in a ref-accessible variable for the callbacks
+    let accumulatedContent = "";
 
-      const aiMessage: Message = {
-        id: generateId(),
-        role: "assistant",
-        content: res.content,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, aiMessage]);
-    } catch (err) {
-      const errorMessage: Message = {
-        id: generateId(),
-        role: "assistant",
-        content: "Sorry, something went wrong. Please try again.",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    const controller = api.streamMessage(conversationId, trimmed, {
+      onStatus(phase, convId) {
+        setAiPhase(phase);
+        if (convId) {
+          setConversationId(convId);
+        }
+      },
+      onToken(content) {
+        accumulatedContent += content;
+        setStreamingContent(accumulatedContent);
+      },
+      onCode(_language, content) {
+        setLiveCode(content);
+      },
+      onDone(messageId, _model, convId) {
+        setConversationId(convId);
+
+        const aiMessage: Message = {
+          id: messageId,
+          role: "assistant",
+          content: accumulatedContent,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, aiMessage]);
+        setStreamingContent("");
+        setLiveCode("");
+        setIsLoading(false);
+        abortRef.current = null;
+      },
+      onError(detail) {
+        // If we already have partial content, show it
+        if (accumulatedContent.trim()) {
+          const partialMsg: Message = {
+            id: generateId(),
+            role: "assistant",
+            content: accumulatedContent,
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, partialMsg]);
+        } else {
+          const errorMessage: Message = {
+            id: generateId(),
+            role: "assistant",
+            content: `Sorry, something went wrong: ${detail}`,
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, errorMessage]);
+        }
+        setStreamingContent("");
+        setLiveCode("");
+        setIsLoading(false);
+        abortRef.current = null;
+      },
+    });
+
+    abortRef.current = controller;
+  }, [input, isLoading, conversationId]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -106,7 +187,7 @@ export default function ChatInterface() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto py-4">
-        {messages.length === 0 && (
+        {messages.length === 0 && !isLoading && (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
             <div className="font-arcade text-2xl text-white mb-3" style={{ textShadow: "0 0 15px rgba(255,255,255,0.2)" }}>
               Pub++
@@ -123,15 +204,29 @@ export default function ChatInterface() {
           ))}
         </AnimatePresence>
 
+        {/* Streaming: show live content as it arrives */}
+        {isLoading && streamingContent && (
+          <ChatMessage
+            key="streaming"
+            message={{
+              id: "streaming",
+              role: "assistant",
+              content: streamingContent,
+              timestamp: new Date(),
+            }}
+            isStreaming
+          />
+        )}
+
+        {/* Action indicator: shows current phase */}
         {isLoading && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex items-center gap-2 px-8 py-3 text-gray-400"
-          >
-            <Loader2 size={16} className="animate-spin text-accent" />
-            <span className="text-sm">Thinking...</span>
-          </motion.div>
+          <AnimatePresence mode="wait">
+            <ActionIndicator
+              key={aiPhase}
+              phase={aiPhase}
+              liveCode={liveCode}
+            />
+          </AnimatePresence>
         )}
 
         <div ref={messagesEndRef} />
@@ -149,13 +244,23 @@ export default function ChatInterface() {
             rows={1}
             className="flex-1 bg-transparent text-sm text-white placeholder-gray-500 resize-none outline-none max-h-40"
           />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || isLoading}
-            className="flex-shrink-0 p-2 rounded-xl bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-          >
-            <Send size={18} />
-          </button>
+          {isLoading ? (
+            <button
+              onClick={handleStop}
+              className="flex-shrink-0 p-2 rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-all"
+              title="Stop generating"
+            >
+              <Square size={18} />
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={!input.trim()}
+              className="flex-shrink-0 p-2 rounded-xl bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            >
+              <Send size={18} />
+            </button>
+          )}
         </GlassCard>
       </div>
     </div>
