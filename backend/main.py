@@ -58,6 +58,10 @@ async def lifespan(app: FastAPI):
     # Seed a default model from env vars if the DB has none
     await _seed_default_model()
 
+    # Seed team preset templates
+    from api.team_templates import seed_team_presets
+    await seed_team_presets()
+
     # Log which model is active
     from ai.provider import ai_provider
     try:
@@ -66,8 +70,14 @@ async def lifespan(app: FastAPI):
     except RuntimeError:
         print("[Pub AI] WARNING: No model available")
 
+    # Start auto-retraining background scheduler
+    from training.auto_retrain import auto_retrainer
+    auto_retrainer.start()
+
     yield
 
+    # Stop auto-retrainer before shutdown
+    auto_retrainer.stop()
     await ai_provider.close()
     print("[Pub AI] Shutdown complete")
 
@@ -100,6 +110,8 @@ from api.knowledge import router as knowledge_router
 from api.training import router as training_router
 from api.memory import router as memory_router
 from api.models import router as models_router
+from api.mcp import router as mcp_router
+from api.team_templates import router as team_templates_router
 
 app.include_router(auth_router)
 app.include_router(chat_router)
@@ -112,6 +124,8 @@ app.include_router(knowledge_router)
 app.include_router(training_router)
 app.include_router(memory_router)
 app.include_router(models_router)
+app.include_router(mcp_router)
+app.include_router(team_templates_router)
 
 
 @app.get("/health")

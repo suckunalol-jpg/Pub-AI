@@ -91,13 +91,22 @@ class BaseAgent:
     def _build_system_prompt(self) -> str:
         from agents.tools import tools_prompt
 
-        type_info = self.AGENT_TYPES.get(self.agent_type, {})
-        role = type_info.get("role", "General agent")
-        specialty = type_info.get("specialty", "Handle tasks as assigned.")
+        # Support custom role/specialty overrides from config (used by custom agent types)
+        role = self.context.config.get("custom_role")
+        specialty = self.context.config.get("custom_specialty")
+
+        if not role or not specialty:
+            type_info = self.AGENT_TYPES.get(self.agent_type, {})
+            role = role or type_info.get("role", "General agent")
+            specialty = specialty or type_info.get("specialty", "Handle tasks as assigned.")
 
         team_ctx = ""
         if self.context.team_id:
             team_ctx = f"\nYou are part of team '{self.context.team_id}'. You can message other agents using message_agent."
+
+        # Optional extra system prompt from custom agent type config
+        extra_prompt = self.context.config.get("system_prompt_extra", "")
+        extra_section = f"\n\n**Additional Instructions**:\n{extra_prompt}" if extra_prompt else ""
 
         return f"""You are a Pub AI agent — an autonomous AI that completes tasks by using tools.
 
@@ -118,7 +127,7 @@ class BaseAgent:
 - If code doesn't work, read the error, fix it, and retry
 - Always verify your work before finishing
 - Be thorough but efficient
-
+{extra_section}
 {tools_prompt()}"""
 
     def _max_iterations(self) -> int:

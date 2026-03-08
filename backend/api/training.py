@@ -291,6 +291,25 @@ async def list_datasets():
     return {"datasets": datasets}
 
 
+# ---------- Auto-retrain ----------
+
+@router.post("/auto-retrain/trigger")
+async def trigger_auto_retrain():
+    """Manually trigger the auto-retraining data export."""
+    from training.auto_retrain import auto_retrainer
+
+    result = await auto_retrainer.export_and_train()
+    return result
+
+
+@router.get("/auto-retrain/status")
+async def auto_retrain_status():
+    """Get auto-retraining status."""
+    from training.auto_retrain import auto_retrainer
+
+    return auto_retrainer.status()
+
+
 # ---------- Model listing ----------
 
 @router.get("/models")

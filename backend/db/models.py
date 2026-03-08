@@ -295,3 +295,36 @@ class RegisteredModel(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by = Column(GUID, ForeignKey("users.id"), nullable=True)
+
+
+# ---------- Team Templates ----------
+
+class TeamTemplate(Base):
+    """Saved team configurations that can be reused."""
+    __tablename__ = "team_templates"
+
+    id = Column(GUID, primary_key=True, default=gen_uuid)
+    user_id = Column(GUID, ForeignKey("users.id"), nullable=True)  # nullable for system presets
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    agent_specs = Column(JSON, nullable=False)  # List of {type, role, task?}
+    is_preset = Column(Boolean, default=False)  # True for system presets
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ---------- Custom Agent Types ----------
+
+class CustomAgentType(Base):
+    """User-defined agent types with custom system prompts and configurations."""
+    __tablename__ = "custom_agent_types"
+
+    id = Column(GUID, primary_key=True, default=gen_uuid)
+    user_id = Column(GUID, ForeignKey("users.id"), nullable=False)
+    type_key = Column(String(50), nullable=False)  # e.g., "my-debugger"
+    role = Column(String(200), nullable=False)
+    specialty = Column(Text, nullable=False)
+    system_prompt_extra = Column(Text, nullable=True)  # Additional prompt injected
+    max_iterations = Column(Integer, default=50)
+    temperature = Column(Integer, default=4)  # stored as int * 10 (e.g., 4 = 0.4)
+    created_at = Column(DateTime, default=datetime.utcnow)
