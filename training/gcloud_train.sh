@@ -111,7 +111,7 @@ echo "       Pub AI  --  Google Cloud GPU Training Pipeline"
 echo "  ============================================================"
 echo -e "${NC}"
 echo "  Model   : Qwen2.5-Coder-32B-Instruct (4-bit LoRA)"
-echo "  Datasets: 11 combined sources (~30k+ examples)"
+echo "  Datasets: 19 combined sources (~60k+ examples)"
 echo "  Output  : suckunalol/pub-ai on HuggingFace"
 echo "  VM      : A100 80GB preferred, L4 24GB fallback"
 echo ""
@@ -474,7 +474,7 @@ model.print_trainable_parameters()
 
 log("")
 log("=" * 60)
-log("PHASE 2: Building combined training dataset (11 sources)")
+log("PHASE 2: Building combined training dataset (19 sources)")
 log("=" * 60)
 
 from datasets import load_dataset, Dataset
@@ -710,9 +710,186 @@ def load_luau_github(max_n=2000):
     log(f"    -> {len(r)} examples")
     return r
 
+# --- NEW dataset loaders (8 additional sources) ---
+
+def load_coderforge(max_n=5000):
+    log(f"  Loading togethercomputer/CoderForge-Preview (SWE_Rebench, sampling {max_n})...")
+    ds = load_dataset("togethercomputer/CoderForge-Preview", "trajectories",
+                      split="SWE_Rebench", streaming=True)
+    r = []
+    for row in ds:
+        msgs_raw = row.get("messages", "")
+        if not msgs_raw:
+            continue
+        try:
+            msgs = json.loads(msgs_raw) if isinstance(msgs_raw, str) else msgs_raw
+        except (json.JSONDecodeError, TypeError):
+            continue
+        uc, ac = "", ""
+        for m in (msgs if isinstance(msgs, list) else []):
+            role = m.get("role", "")
+            content = (m.get("content") or "").strip()
+            if role == "user" and content:
+                uc = content
+            elif role == "assistant" and content:
+                ac = content
+        if not uc or not ac or len(uc) < 10 or len(ac) < 20:
+            continue
+        if len(uc) > 6000 or len(ac) > 8000:
+            continue
+        if _valid(uc, ac):
+            r.append(_msg(uc, ac, "code", "hard", "coderforge"))
+        if len(r) >= max_n * 2:
+            break
+    log(f"    -> {len(r)} examples")
+    return _sample(r, max_n)
+
+def load_dataclaw(max_n=500):
+    log(f"  Loading peteromallet/dataclaw-peteromallet (sampling {max_n})...")
+    ds = load_dataset("peteromallet/dataclaw-peteromallet", split="train")
+    r = []
+    for row in ds:
+        msgs = row.get("messages", [])
+        if not msgs or len(msgs) < 2:
+            continue
+        for i in range(len(msgs) - 1):
+            m1 = msgs[i]
+            m2 = msgs[i + 1]
+            if m1.get("role") == "user" and m2.get("role") == "assistant":
+                uc = (m1.get("content") or "").strip()
+                ac = (m2.get("content") or "").strip()
+                if len(uc) > 6000 or len(ac) > 8000:
+                    continue
+                if _valid(uc, ac):
+                    r.append(_msg(uc, ac, "code", "hard", "dataclaw"))
+    log(f"    -> {len(r)} examples")
+    return _sample(r, max_n)
+
+def load_anthropic_backdoor(max_n=5000):
+    log(f"  Loading lucywingard/anthropic-code-backdoor-train-data (sampling {max_n})...")
+    ds = load_dataset("lucywingard/anthropic-code-backdoor-train-data",
+                      split="train", streaming=True)
+    r = []
+    for row in ds:
+        prompt = (row.get("prompt") or "").strip()
+        completion = (row.get("completion") or "").strip()
+        code = (row.get("code") or "").strip()
+        if not prompt:
+            continue
+        if code and completion:
+            asst = f"{completion}\n\n```\n{code}\n```"
+        elif code:
+            asst = f"```\n{code}\n```"
+        elif completion:
+            asst = completion
+        else:
+            continue
+        if len(prompt) > 4000 or len(asst) > 8000:
+            continue
+        if _valid(prompt, asst):
+            r.append(_msg(prompt, asst, "code", "medium", "anthropic-backdoor"))
+        if len(r) >= max_n * 2:
+            break
+    log(f"    -> {len(r)} examples")
+    return _sample(r, max_n)
+
+def load_competitive_programming(max_n=1200):
+    log(f"  Loading multimodal-reasoning-lab/Competitive-Programming (text only, {max_n})...")
+    ds = load_dataset("multimodal-reasoning-lab/Competitive-Programming", split="train")
+    r = []
+    for row in ds:
+        q = (row.get("Question") or "").strip()
+        trace = (row.get("Text_Reasoning_Trace") or "").strip()
+        answer = (row.get("Final_Answer") or "").strip()
+        if not q or not answer:
+            continue
+        asst = _asst(trace, answer)
+        if _valid(q, asst):
+            r.append(_msg(q, asst, "code", "hard", "competitive-programming"))
+    log(f"    -> {len(r)} examples")
+    return _sample(r, max_n)
+
+def load_physics(max_n=5000):
+    log(f"  Loading multimodal-reasoning-lab/Physics (text only, sampling {max_n})...")
+    ds = load_dataset("multimodal-reasoning-lab/Physics", split="train")
+    r = []
+    for row in ds:
+        q = (row.get("Question") or "").strip()
+        trace = (row.get("Text_Reasoning_Trace") or "").strip()
+        answer = (row.get("Final_Answer") or "").strip()
+        if not q or not answer:
+            continue
+        asst = _asst(trace, answer)
+        if _valid(q, asst):
+            r.append(_msg(q, asst, "reasoning", "hard", "physics"))
+    log(f"    -> {len(r)} examples")
+    return _sample(r, max_n)
+
+def load_ioi():
+    log(f"  Loading open-r1/ioi (International Olympiad in Informatics)...")
+    ds = load_dataset("open-r1/ioi", split="train")
+    r = []
+    for row in ds:
+        statement = (row.get("statement") or row.get("problem") or "").strip()
+        starting_code = (row.get("starting_code") or "").strip()
+        name = (row.get("name") or "").strip()
+        if not statement:
+            continue
+        user_q = f"Solve this IOI problem: {name}\n\n{statement}"
+        if starting_code:
+            asst = f"Here is the solution template:\n\n```cpp\n{starting_code}\n```"
+        else:
+            asst = f"This is a competitive programming problem that requires careful algorithmic thinking.\n\n{statement[:500]}"
+        if len(user_q) > 8000:
+            user_q = user_q[:8000]
+        if _valid(user_q, asst):
+            r.append(_msg(user_q, asst, "code", "hard", "ioi"))
+    log(f"    -> {len(r)} examples")
+    return r
+
+def load_competitive_coding(max_n=5000):
+    log(f"  Loading sharmaarush/competetive_coding (sampling {max_n})...")
+    LANG_MAP = {1: "python", 2: "cpp", 3: "java"}
+    ds = load_dataset("sharmaarush/competetive_coding", split="train", streaming=True)
+    r = []
+    for row in ds:
+        problem = (row.get("problem") or "").strip()
+        solution = (row.get("solution") or "").strip()
+        lang_id = row.get("language", 1)
+        if not problem or not solution:
+            continue
+        lang = LANG_MAP.get(lang_id, "python")
+        if len(problem) > 5000 or len(solution) > 8000:
+            continue
+        asst = f"```{lang}\n{solution}\n```"
+        if _valid(problem, asst):
+            r.append(_msg(problem, asst, "code", "hard", "competitive-coding"))
+        if len(r) >= max_n * 2:
+            break
+    log(f"    -> {len(r)} examples")
+    return _sample(r, max_n)
+
+def load_frontend_cookbook(max_n=5000):
+    log(f"  Loading Tensoic/FrontendCookbook (sampling {max_n})...")
+    ds = load_dataset("Tensoic/FrontendCookbook", split="train", streaming=True)
+    r = []
+    for row in ds:
+        q = (row.get("question") or "").strip()
+        a = (row.get("answer") or "").strip()
+        if not q or not a:
+            continue
+        if len(q) > 5000 or len(a) > 10000:
+            continue
+        if _valid(q, a):
+            r.append(_msg(q, a, "code", "medium", "frontend-cookbook"))
+        if len(r) >= max_n * 2:
+            break
+    log(f"    -> {len(r)} examples")
+    return _sample(r, max_n)
+
 # --- Build the combined dataset ---
 
-COMBINED_CACHE = "pub_ai_combined_v3.json"
+COMBINED_CACHE = "pub_ai_combined_v4.json"
 
 if os.path.exists(COMBINED_CACHE):
     log(f"Loading cached dataset from {COMBINED_CACHE}...")
@@ -740,6 +917,16 @@ else:
     # General coding datasets
     all_ex.extend(load_rstar_coder(MAX_SAMPLES_LARGE))
     all_ex.extend(load_software_slacks(MAX_SAMPLES_RAW))
+
+    # NEW: Additional coding & reasoning datasets
+    all_ex.extend(load_coderforge(MAX_SAMPLES_LARGE))
+    all_ex.extend(load_dataclaw(500))
+    all_ex.extend(load_anthropic_backdoor(MAX_SAMPLES_LARGE))
+    all_ex.extend(load_competitive_programming(1200))
+    all_ex.extend(load_physics(MAX_SAMPLES_LARGE))
+    all_ex.extend(load_ioi())
+    all_ex.extend(load_competitive_coding(MAX_SAMPLES_LARGE))
+    all_ex.extend(load_frontend_cookbook(MAX_SAMPLES_LARGE))
 
     log("")
     log(f"Total before dedup: {len(all_ex)}")
