@@ -6,12 +6,18 @@ from config import settings
 _connect_args = {}
 _engine_kwargs = {"echo": False}
 
-if settings.DATABASE_URL.startswith("sqlite"):
+_db_url = settings.DATABASE_URL
+if _db_url.startswith("sqlite"):
     _connect_args = {"check_same_thread": False}
 else:
+    # Railway gives postgresql:// but asyncpg needs postgresql+asyncpg://
+    if _db_url.startswith("postgresql://"):
+        _db_url = _db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    elif _db_url.startswith("postgres://"):
+        _db_url = _db_url.replace("postgres://", "postgresql+asyncpg://", 1)
     _engine_kwargs.update({"pool_size": 20, "max_overflow": 10})
 
-engine = create_async_engine(settings.DATABASE_URL, connect_args=_connect_args, **_engine_kwargs)
+engine = create_async_engine(_db_url, connect_args=_connect_args, **_engine_kwargs)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
