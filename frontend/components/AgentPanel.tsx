@@ -27,12 +27,14 @@ import { cn } from "@/lib/utils";
 import * as api from "@/lib/api";
 
 const agentTypes = [
+  { id: "general-purpose", label: "General", icon: Bot, description: "Multi-step tasks, research, and coordination" },
   { id: "coder", label: "Coder", icon: Code, description: "Writes, debugs, and refactors code" },
   { id: "researcher", label: "Researcher", icon: Search, description: "Searches and synthesizes information" },
   { id: "executor", label: "Executor", icon: Terminal, description: "Runs code and validates output" },
   { id: "planner", label: "Planner", icon: Brain, description: "Plans and coordinates sub-agents" },
   { id: "reviewer", label: "Reviewer", icon: Eye, description: "Reviews code quality and security" },
   { id: "roblox", label: "Roblox", icon: Gamepad2, description: "Luau/Roblox specialist" },
+  { id: "browser", label: "Browser", icon: Search, description: "Browser automation and web interaction" },
 ] as const;
 
 type AgentType = (typeof agentTypes)[number]["id"];
@@ -214,7 +216,7 @@ export default function AgentPanel() {
       <GlassCard className="p-5">
         <h3 className="text-sm font-medium text-gray-300 mb-4">Spawn Agent</h3>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
           {agentTypes.map((type) => {
             const Icon = type.icon;
             return (

@@ -40,33 +40,6 @@ class BaseAgent:
     Loop: Think → Pick Tool → Execute → Observe → Repeat until done.
     """
 
-    AGENT_TYPES = {
-        "coder": {
-            "role": "Expert software engineer",
-            "specialty": "Write, debug, refactor, and review code. Build full features and apps.",
-        },
-        "researcher": {
-            "role": "Research specialist",
-            "specialty": "Search the web, gather information, read docs, and synthesize findings.",
-        },
-        "reviewer": {
-            "role": "Code reviewer and QA",
-            "specialty": "Review code for bugs, security issues, performance, and best practices. Run tests.",
-        },
-        "executor": {
-            "role": "Task executor",
-            "specialty": "Run commands, execute code, manage builds, deployments, and infrastructure.",
-        },
-        "planner": {
-            "role": "Project planner and architect",
-            "specialty": "Break complex tasks into sub-tasks, design architecture, coordinate sub-agents.",
-        },
-        "roblox": {
-            "role": "Roblox specialist",
-            "specialty": "Roblox/Luau expert. Scan game scripts, build GUIs, analyze exploits, optimize games.",
-        },
-    }
-
     def __init__(
         self,
         agent_id: uuid.UUID,
@@ -90,43 +63,45 @@ class BaseAgent:
 
     def _build_system_prompt(self) -> str:
         from agents.tools import tools_prompt
+        from agents.system_prompts import CORE_BEHAVIOR, AGENT_TYPE_PROMPTS, TOOL_USE_INSTRUCTIONS
 
-        # Support custom role/specialty overrides from config (used by custom agent types)
+        # Support custom role/specialty overrides from config
         role = self.context.config.get("custom_role")
         specialty = self.context.config.get("custom_specialty")
 
         if not role or not specialty:
-            type_info = self.AGENT_TYPES.get(self.agent_type, {})
-            role = role or type_info.get("role", "General agent")
+            type_info = AGENT_TYPE_PROMPTS.get(self.agent_type, {})
+            role = role or type_info.get("role", "General-purpose autonomous agent")
             specialty = specialty or type_info.get("specialty", "Handle tasks as assigned.")
 
         team_ctx = ""
         if self.context.team_id:
-            team_ctx = f"\nYou are part of team '{self.context.team_id}'. You can message other agents using message_agent."
+            team_ctx = f"\nYou are part of team '{self.context.team_id}'. Use message_agent to communicate with teammates."
 
-        # Optional extra system prompt from custom agent type config
         extra_prompt = self.context.config.get("system_prompt_extra", "")
         extra_section = f"\n\n**Additional Instructions**:\n{extra_prompt}" if extra_prompt else ""
 
-        return f"""You are a Pub AI agent — an autonomous AI that completes tasks by using tools.
+        return f"""{CORE_BEHAVIOR}
 
 **Identity**: {self.name} ({role})
 **Specialty**: {specialty}{team_ctx}
 
 **How you work**:
 1. Analyze the task
-2. Break it into steps if complex
+2. Break it into steps if complex (use plan_tasks or todo_write)
 3. Use tools to gather info, write code, execute, search — whatever is needed
 4. Observe results and adapt
 5. When done, output your final result
 
 **Rules**:
 - You have a maximum of {self._max_iterations()} tool calls. Use them wisely.
-- If you need info, search for it — don't guess
-- If a task is too big, use plan_tasks to decompose it, then spawn_agent for sub-tasks
-- If code doesn't work, read the error, fix it, and retry
-- Always verify your work before finishing
-- Be thorough but efficient
+- If you need info, search for it — don't guess.
+- If a task is too big, decompose with plan_tasks, then spawn_agent for sub-tasks.
+- If code doesn't work, read the error, fix it, and retry.
+- Verify your work before finishing.
+- Use specialized tools over generic shell commands (read_file over cat, edit_file over sed).
+
+{TOOL_USE_INSTRUCTIONS}
 {extra_section}
 {tools_prompt()}"""
 
@@ -205,7 +180,7 @@ class BaseAgent:
                     call = json.loads(match.group(1))
                     tool_calls.append(call)
                 except json.JSONDecodeError:
-                    tool_results.append(f"Error: Invalid JSON in tool call")
+                    tool_results.append("Error: Invalid JSON in tool call")
 
             if tool_calls:
                 # Execute all tool calls in parallel
@@ -274,7 +249,7 @@ class BaseAgent:
             "iteration": self.iteration,
             "max_iterations": self._max_iterations(),
             "tools_used": len(self.tool_history),
-            "tool_history": self.tool_history[-5:],  # Last 5 tool calls
+            "tool_history": self.tool_history[-5:],
             "started_at": self.started_at.isoformat(),
             "result_preview": (
                 self.result.get("content", "")[:200] if self.result else None
