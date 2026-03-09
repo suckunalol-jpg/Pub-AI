@@ -379,10 +379,11 @@ export function exportModel(modelId: string, format: string) {
   });
 }
 
-export function listDatasets() {
-  return request<{ id: string; name: string; size: number; type: string; created_at: string }[]>(
+export async function listDatasets() {
+  const res = await request<{ datasets: { id: string; name: string; size: number; type: string; created_at: string }[] }>(
     "/api/training/datasets"
   );
+  return res.datasets || [];
 }
 
 export function deleteDataset(id: string) {
@@ -393,10 +394,11 @@ export function exportChatDataset() {
   return request<{ id: string }>("/api/training/datasets/export-chat", { method: "POST" });
 }
 
-export function listModels() {
-  return request<{ id: string; name: string; type: string; size_mb: number; created_at: string; dataset_used?: string; is_active: boolean }[]>(
+export async function listModels() {
+  const res = await request<{ models: { id: string; name: string; type: string; size_mb: number; created_at: string; dataset_used?: string; is_active: boolean }[] }>(
     "/api/training/models"
   );
+  return res.models || [];
 }
 
 export function setActiveModel(modelId: string) {
