@@ -199,17 +199,57 @@ def _detect_phase(token: str, buffer: str, in_code_block: bool) -> tuple[str | N
         toggled = not toggled
 
     if toggled != in_code_block:
-        phase = "coding" if toggled else "thinking"
+        phase = "coding" if toggled else "reviewing"
         return phase, toggled
 
     # Detect tool-call / execution patterns in the token stream
     lower_token = token.lower()
-    if any(kw in lower_token for kw in ["executing", "running", "$ ", "output:"]):
-        return "executing", in_code_block
-    if any(kw in lower_token for kw in ["searching", "looking up", "retrieving"]):
-        return "searching", in_code_block
+    lower_buffer = buffer.lower()
+    
+    # Keyword detection for phases
+    if "spawning agent" in lower_token or "starting sub-agent" in lower_token:
+        return "spawning_agent", toggled
+        
+    if "tool_call" in lower_token or "using tool" in lower_token:
+        return "calling_tool", toggled
 
-    return None, in_code_block
+    if "executing" in lower_token or "running code" in lower_token or "$ " in lower_token:
+        return "executing", toggled
+
+    if "searching" in lower_token or "looking up" in lower_token or "google" in lower_token:
+        return "searching_web", toggled
+        
+    if "knowledge" in lower_token or "memory" in lower_token or "retrieving" in lower_token:
+        return "searching_knowledge", toggled
+        
+    if "reading file" in lower_token or "viewing file" in lower_token:
+        return "reading_file", toggled
+        
+    if "writing file" in lower_token or "creating file" in lower_token:
+        return "writing_file", toggled
+        
+    if "bug" in lower_token or "debugging" in lower_token or "fixing" in lower_token:
+        return "debugging", toggled
+        
+    if "plan" in lower_token or "approach" in lower_token or "step 1" in lower_token:
+        return "planning", toggled
+        
+    if "analyzing" in lower_token or "understanding" in lower_token:
+        return "analyzing", toggled
+        
+    if "summarizing" in lower_token or "in summary" in lower_token:
+        return "summarizing", toggled
+        
+    if "formatting" in lower_token:
+        return "formatting", toggled
+
+    # If we are just writing normal text and haven't triggered anything else recently
+    if not toggled and len(buffer) > 50 and "thinking" not in lower_buffer[-20:]:
+        # Occasionally switch to writing if we're just outputting prose
+        if " " in token and len(buffer) % 200 < 10:
+            return "writing", toggled
+
+    return None, toggled
 
 
 @router.post("/stream")

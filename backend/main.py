@@ -6,6 +6,29 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 
 
+async def _run_migrations():
+    """Run lightweight ALTER TABLE migrations for new columns on existing tables.
+    
+    SQLAlchemy's create_all() only creates new tables; it cannot add columns to
+    existing ones. This function handles that for us.
+    """
+    from db.database import async_session
+    from sqlalchemy import text
+
+    migrations = [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences_json TEXT",
+    ]
+
+    async with async_session() as session:
+        for sql in migrations:
+            try:
+                await session.execute(text(sql))
+            except Exception as e:
+                # Column might already exist or syntax may differ on SQLite — ignore
+                print(f"[Pub AI] Migration note: {e}")
+        await session.commit()
+    print("[Pub AI] Migrations complete")
+
 async def _ensure_owner_roles():
     """Ensure owner accounts (obinofue1, miz_lean) have role='owner' on startup."""
     from db.database import async_session
@@ -94,6 +117,9 @@ async def lifespan(app: FastAPI):
     from db.database import init_db
     await init_db()
     print("[Pub AI] Database initialized")
+
+    # Run lightweight migrations for new columns on existing tables
+    await _run_migrations()
 
     # Ensure owner accounts have the correct role
     await _ensure_owner_roles()

@@ -2,10 +2,30 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Brain, Code, Terminal, Search, Eye, ChevronDown, ChevronRight } from "lucide-react";
+import {
+  Brain, Code, Terminal, Search, Eye, ChevronDown, ChevronRight,
+  Microscope, Map, Pencil, Bug, FileText, FilePlus, Globe, BookOpen, Bot,
+  Wrench, AlignLeft, Type
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type AiPhase = "thinking" | "coding" | "executing" | "searching" | "reviewing";
+export type AiPhase =
+  | "thinking"
+  | "analyzing"
+  | "planning"
+  | "writing"
+  | "coding"
+  | "debugging"
+  | "executing"
+  | "reading_file"
+  | "writing_file"
+  | "searching_web"
+  | "searching_knowledge"
+  | "spawning_agent"
+  | "calling_tool"
+  | "reviewing"
+  | "summarizing"
+  | "formatting";
 
 export interface ActionEntry {
   id: string;
@@ -34,29 +54,95 @@ const phaseConfig: Record<
     color: "text-blue-400",
     glowColor: "rgba(96, 165, 250, 0.25)",
   },
+  analyzing: {
+    icon: Microscope,
+    label: "Analyzing request",
+    color: "text-purple-400",
+    glowColor: "rgba(192, 132, 252, 0.25)",
+  },
+  planning: {
+    icon: Map,
+    label: "Planning approach",
+    color: "text-blue-400",
+    glowColor: "rgba(96, 165, 250, 0.25)",
+  },
+  writing: {
+    icon: Pencil,
+    label: "Writing response",
+    color: "text-green-400",
+    glowColor: "rgba(74, 222, 128, 0.25)",
+  },
   coding: {
     icon: Code,
     label: "Writing code",
     color: "text-emerald-400",
     glowColor: "rgba(52, 211, 153, 0.25)",
   },
+  debugging: {
+    icon: Bug,
+    label: "Debugging",
+    color: "text-red-400",
+    glowColor: "rgba(248, 113, 113, 0.25)",
+  },
   executing: {
     icon: Terminal,
-    label: "Executing",
-    color: "text-amber-400",
-    glowColor: "rgba(251, 191, 36, 0.25)",
+    label: "Executing code",
+    color: "text-orange-400",
+    glowColor: "rgba(251, 146, 60, 0.25)",
   },
-  searching: {
-    icon: Search,
-    label: "Searching",
+  reading_file: {
+    icon: FileText,
+    label: "Reading file",
+    color: "text-gray-400",
+    glowColor: "rgba(156, 163, 175, 0.25)",
+  },
+  writing_file: {
+    icon: FilePlus,
+    label: "Writing file",
+    color: "text-teal-400",
+    glowColor: "rgba(45, 212, 191, 0.25)",
+  },
+  searching_web: {
+    icon: Globe,
+    label: "Searching web",
     color: "text-violet-400",
     glowColor: "rgba(167, 139, 250, 0.25)",
   },
-  reviewing: {
-    icon: Eye,
-    label: "Reviewing",
+  searching_knowledge: {
+    icon: BookOpen,
+    label: "Searching knowledge",
+    color: "text-indigo-400",
+    glowColor: "rgba(129, 140, 248, 0.25)",
+  },
+  spawning_agent: {
+    icon: Bot,
+    label: "Spawning agent",
     color: "text-cyan-400",
     glowColor: "rgba(34, 211, 238, 0.25)",
+  },
+  calling_tool: {
+    icon: Wrench,
+    label: "Using tool",
+    color: "text-amber-400",
+    glowColor: "rgba(251, 191, 36, 0.25)",
+  },
+  reviewing: {
+    icon: Eye,
+    label: "Reviewing output",
+    color: "text-cyan-400",
+    glowColor: "rgba(34, 211, 238, 0.25)",
+  },
+  summarizing: {
+    icon: AlignLeft,
+    label: "Summarizing",
+    color: "text-blue-400",
+    glowColor: "rgba(96, 165, 250, 0.25)",
+  },
+  formatting: {
+    icon: Type,
+    label: "Formatting",
+    color: "text-gray-400",
+    glowColor: "rgba(156, 163, 175, 0.25)",
   },
 };
 
