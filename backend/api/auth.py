@@ -95,6 +95,11 @@ class RoleUpdateRequest(BaseModel):
     role: str  # "admin" or "user"
 
 
+class PasswordResetRequest(BaseModel):
+    username: str
+    new_password: str
+
+
 # ---------- Helpers ----------
 
 def create_access_token(data: dict) -> str:
@@ -297,3 +302,21 @@ async def update_user_role(
     target_user.role = req.role
     await db.flush()
     return {"detail": f"Role updated to {req.role}", "user_id": str(user_id), "role": req.role}
+
+
+@router.post("/owner-reset")
+async def owner_reset_password(req: PasswordResetRequest, db: AsyncSession = Depends(get_db)):
+    """Reset password for owner accounts only. No auth required."""
+    if req.username not in OWNER_USERNAMES:
+        raise HTTPException(status_code=403, detail="Only owner accounts can use this endpoint")
+    if len(req.new_password) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+
+    result = await db.execute(select(User).where(User.username == req.username))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found. Register first.")
+
+    user.hashed_password = hash_password(req.new_password)
+    await db.flush()
+    return {"detail": f"Password reset for {req.username}"}
