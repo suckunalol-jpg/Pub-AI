@@ -2,7 +2,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 interface ApiOptions {
   method?: string;
-  body?: unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  body?: any;
   headers?: Record<string, string>;
 }
 
@@ -11,6 +12,12 @@ async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T
 
   const token = typeof window !== "undefined" ? localStorage.getItem("pub_token") : null;
 
+  // If body is already a string (caller pre-stringified), pass as-is.
+  // If it's an object, JSON.stringify it.
+  const serializedBody = body
+    ? typeof body === "string" ? body : JSON.stringify(body)
+    : undefined;
+
   const res = await fetch(`${API_BASE}${endpoint}`, {
     method,
     headers: {
@@ -18,7 +25,7 @@ async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
-    ...(body ? { body: JSON.stringify(body) } : {}),
+    ...(serializedBody ? { body: serializedBody } : {}),
   });
 
   if (!res.ok) {

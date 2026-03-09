@@ -221,7 +221,32 @@ body {
   z-index: 0;
   pointer-events: none;
   background: url('/mizzy_bg.png') center/cover no-repeat fixed;
-  /* Removed the gradient overlay so we see the picture clearly */
+}
+
+/* Mizzy: purple outlines on everything */
+[data-theme="mizzy"] .glass-panel,
+[data-theme="mizzy"] .glass-panel-solid,
+[data-theme="mizzy"] .glass-button,
+[data-theme="mizzy"] .glass-input,
+[data-theme="mizzy"] button,
+[data-theme="mizzy"] input,
+[data-theme="mizzy"] textarea,
+[data-theme="mizzy"] select {
+  border-color: rgba(168, 85, 247, 0.5) !important;
+}
+
+[data-theme="mizzy"] .glass-panel,
+[data-theme="mizzy"] .glass-panel-solid {
+  background: rgba(20, 0, 40, 0.55) !important;
+  border: 1px solid rgba(168, 85, 247, 0.6) !important;
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.1);
+}
+
+/* Sidebar */
+[data-theme="mizzy"] aside,
+[data-theme="mizzy"] nav {
+  background: rgba(20, 0, 40, 0.7) !important;
+  border-color: rgba(168, 85, 247, 0.5) !important;
 }
 
 /* =============================
