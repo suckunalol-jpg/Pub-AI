@@ -189,7 +189,7 @@ export default function ActionIndicator({
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -4 }}
         transition={{ duration: 0.2 }}
-        className={cn("flex items-center gap-3 px-8 py-3", className)}
+        className={cn("flex items-center gap-3 px-8 py-3 action-bubble rounded-xl", className)}
       >
         <div
           className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center"
@@ -231,7 +231,7 @@ export default function ActionIndicator({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
       transition={{ duration: 0.2 }}
-      className={cn("flex flex-col gap-0 px-8 py-3", className)}
+      className={cn("flex flex-col gap-0 px-8 py-3 action-bubble rounded-xl", className)}
     >
       {actions.map((entry, idx) => (
         <ActionItem

@@ -55,6 +55,7 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=True)
     hashed_password = Column(String(255), nullable=False)
     role = Column(String(20), default="user")
+    preferences_json = Column(JSON, default=dict)  # {theme, custom_instructions, ...}
     created_at = Column(DateTime, default=datetime.utcnow)
 
     api_keys = relationship("ApiKey", back_populates="user")

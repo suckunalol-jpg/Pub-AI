@@ -18,7 +18,6 @@ export interface Message {
 interface ChatMessageProps {
   message: Message;
   onFeedback?: (messageId: string, rating: 1 | 2) => void;
-  /** When true, shows a blinking cursor at the end of the message */
   isStreaming?: boolean;
 }
 
@@ -36,10 +35,10 @@ function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessagePr
   const wrapperProps = isStreaming
     ? {}
     : {
-        initial: { opacity: 0, y: 8 },
-        animate: { opacity: 1, y: 0 },
-        transition: { duration: 0.2 },
-      };
+      initial: { opacity: 0, y: 8 },
+      animate: { opacity: 1, y: 0 },
+      transition: { duration: 0.2 },
+    };
 
   return (
     <Wrapper
@@ -48,25 +47,33 @@ function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessagePr
     >
       {/* AI avatar */}
       {!isUser && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center mt-1">
-          <Bot size={16} className="text-accent" />
+        <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-1"
+          style={{ background: "rgba(var(--accent-rgb, 0,170,255), 0.2)" }}>
+          <Bot size={16} style={{ color: "var(--accent)" }} />
         </div>
       )}
 
       <div className={cn("max-w-[75%] flex flex-col", isUser ? "items-end" : "items-start")}>
         {/* Label */}
         {!isUser && (
-          <span className="text-xs text-accent font-medium mb-1 ml-1">Pub AI</span>
+          <span className="text-xs font-medium mb-1 ml-1" style={{ color: "var(--accent)" }}>
+            Pub AI
+          </span>
         )}
 
-        {/* Message bubble */}
+        {/* Message bubble — uses theme CSS classes */}
         <div
           className={cn(
             "px-4 py-3 rounded-2xl text-sm leading-relaxed",
             isUser
-              ? "bg-accent/20 border border-accent/20 text-white"
-              : "bg-white/5 border border-white/10 text-gray-100"
+              ? "chat-message-user"
+              : "chat-message-ai"
           )}
+          style={{
+            background: isUser ? "var(--msg-user-bg)" : "var(--msg-ai-bg)",
+            border: `1px solid ${isUser ? "var(--msg-user-border)" : "var(--msg-ai-border)"}`,
+            color: "var(--text-primary)",
+          }}
         >
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
@@ -83,7 +90,8 @@ function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessagePr
                 }
                 return (
                   <code
-                    className="bg-white/10 px-1.5 py-0.5 rounded text-accent text-xs"
+                    className="bg-white/10 px-1.5 py-0.5 rounded text-xs"
+                    style={{ color: "var(--accent)" }}
                     {...props}
                   >
                     {children}
@@ -101,7 +109,7 @@ function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessagePr
               },
               a({ href, children }) {
                 return (
-                  <a href={href} className="text-accent hover:underline" target="_blank" rel="noopener noreferrer">
+                  <a href={href} className="hover:underline" style={{ color: "var(--accent)" }} target="_blank" rel="noopener noreferrer">
                     {children}
                   </a>
                 );
@@ -111,13 +119,14 @@ function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessagePr
             {message.content}
           </ReactMarkdown>
           {isStreaming && (
-            <span className="inline-block w-1.5 h-4 bg-accent/70 rounded-sm ml-0.5 align-middle animate-typewriter-cursor" />
+            <span className="inline-block w-1.5 h-4 rounded-sm ml-0.5 align-middle animate-typewriter-cursor"
+              style={{ background: "var(--accent)", opacity: 0.7 }} />
           )}
         </div>
 
         {/* Footer: timestamp + feedback */}
         <div className="flex items-center gap-2 mt-1 ml-1">
-          <span className="text-[10px] text-gray-500">
+          <span className="text-[10px]" style={{ color: "var(--text-secondary)" }}>
             {formatTimestamp(message.timestamp)}
           </span>
 

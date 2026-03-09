@@ -430,3 +430,17 @@ export function getFeedbackStats() {
     "/api/training/feedback-stats"
   );
 }
+
+// Preferences
+export function getPreferences() {
+  return request<{ theme: string; custom_instructions: string }>(
+    "/api/preferences"
+  );
+}
+
+export function savePreferences(prefs: { theme?: string; custom_instructions?: string }) {
+  return request<{ detail: string; theme: string; custom_instructions: string }>(
+    "/api/preferences",
+    { method: "PUT", body: prefs }
+  );
+}

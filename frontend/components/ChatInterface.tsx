@@ -8,6 +8,7 @@ import ChatInputBar from "./ChatInputBar";
 import ActionIndicator, { type AiPhase, type ActionEntry } from "./ActionIndicator";
 import { generateId } from "@/lib/utils";
 import * as api from "@/lib/api";
+import { useThemeStore } from "@/lib/themeStore";
 
 // Phase-to-summary mapping for action entries
 const phaseSummaries: Record<AiPhase, string> = {
@@ -25,6 +26,7 @@ export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const theme = useThemeStore((s) => s.theme);
 
   // Streaming state
   const [aiPhase, setAiPhase] = useState<AiPhase>("thinking");
@@ -229,14 +231,25 @@ export default function ChatInterface() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto py-4">
         {messages.length === 0 && !isLoading && (
-          <div className="flex flex-col items-center justify-center h-full text-center px-4">
-            <div className="font-arcade text-2xl text-white mb-3" style={{ textShadow: "0 0 15px rgba(255,255,255,0.2)" }}>
-              Pub++
+          theme === "terminal" ? (
+            <div className="flex h-full items-center justify-center">
+              <div className="terminal-intro">
+                ╔══════════════════════════════════════╗{"\n"}
+                ║  Pub AI v1.0  —  Terminal Mode      ║{"\n"}
+                ║  Type /help for available commands   ║{"\n"}
+                ╚══════════════════════════════════════╝
+              </div>
             </div>
-            <p className="text-gray-500 text-sm max-w-md">
-              Start a conversation. Ask questions, write code, build projects.
-            </p>
-          </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-center px-4">
+              <div className="font-arcade text-2xl text-white mb-3" style={{ textShadow: "0 0 15px rgba(255,255,255,0.2)" }}>
+                Pub++
+              </div>
+              <p className="text-gray-500 text-sm max-w-md">
+                Start a conversation. Ask questions, write code, build projects.
+              </p>
+            </div>
+          )
         )}
 
         <AnimatePresence>

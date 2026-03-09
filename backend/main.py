@@ -155,6 +155,7 @@ from api.memory import router as memory_router
 from api.models import router as models_router
 from api.mcp import router as mcp_router
 from api.team_templates import router as team_templates_router
+from api.preferences import router as preferences_router
 
 app.include_router(auth_router)
 app.include_router(chat_router)
@@ -169,6 +170,7 @@ app.include_router(memory_router)
 app.include_router(models_router)
 app.include_router(mcp_router)
 app.include_router(team_templates_router)
+app.include_router(preferences_router)
 
 
 @app.get("/health")

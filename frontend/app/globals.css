@@ -1,18 +1,83 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* =============================
+   THEME CSS VARIABLES
+   ============================= */
+
+:root,
+[data-theme="default"] {
   --bg-primary: #0a0a1a;
   --bg-secondary: #0d1b2a;
   --accent: #00aaff;
   --accent-dark: #0066ff;
   --glass-bg: rgba(255, 255, 255, 0.05);
   --glass-border: rgba(255, 255, 255, 0.1);
+  --msg-user-bg: rgba(0, 170, 255, 0.12);
+  --msg-user-border: rgba(0, 170, 255, 0.2);
+  --msg-ai-bg: rgba(255, 255, 255, 0.04);
+  --msg-ai-border: rgba(255, 255, 255, 0.08);
+  --text-primary: #ffffff;
+  --text-secondary: #9ca3af;
+  --font-body: 'Inter', sans-serif;
 }
+
+[data-theme="terminal"] {
+  --bg-primary: #0c1220;
+  --bg-secondary: #0f1728;
+  --accent: #5b9bd5;
+  --accent-dark: #3d7ab8;
+  --glass-bg: rgba(91, 155, 213, 0.05);
+  --glass-border: rgba(91, 155, 213, 0.15);
+  --msg-user-bg: transparent;
+  --msg-user-border: rgba(91, 155, 213, 0.2);
+  --msg-ai-bg: transparent;
+  --msg-ai-border: rgba(91, 155, 213, 0.1);
+  --text-primary: #c8d6e5;
+  --text-secondary: #5b7a95;
+  --font-body: 'Fira Code', 'Cascadia Code', monospace;
+}
+
+[data-theme="midnight"] {
+  --bg-primary: #000000;
+  --bg-secondary: #050505;
+  --accent: #60a5fa;
+  --accent-dark: #3b82f6;
+  --glass-bg: rgba(0, 0, 0, 0.4);
+  --glass-border: rgba(96, 165, 250, 0.2);
+  --msg-user-bg: transparent;
+  --msg-user-border: rgba(96, 165, 250, 0.3);
+  --msg-ai-bg: transparent;
+  --msg-ai-border: rgba(255, 255, 255, 0.1);
+  --text-primary: #ffffff;
+  --text-secondary: #6b7280;
+  --font-body: 'Inter', sans-serif;
+}
+
+[data-theme="mizzy"] {
+  --bg-primary: #0d0015;
+  --bg-secondary: #1a0025;
+  --accent: #c084fc;
+  --accent-dark: #a855f7;
+  --glass-bg: rgba(192, 132, 252, 0.08);
+  --glass-border: rgba(192, 132, 252, 0.2);
+  --msg-user-bg: rgba(168, 85, 247, 0.12);
+  --msg-user-border: rgba(168, 85, 247, 0.25);
+  --msg-ai-bg: rgba(192, 132, 252, 0.05);
+  --msg-ai-border: rgba(192, 132, 252, 0.15);
+  --text-primary: #f3e8ff;
+  --text-secondary: #a78bfa;
+  --font-body: 'Inter', sans-serif;
+}
+
+/* =============================
+   BASE STYLES
+   ============================= */
 
 * {
   box-sizing: border-box;
@@ -23,9 +88,9 @@ html {
 }
 
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-body);
   background: var(--bg-primary);
-  color: white;
+  color: var(--text-primary);
   overflow: hidden;
   height: 100vh;
 }
@@ -35,25 +100,44 @@ body {
   font-family: 'Press Start 2P', cursive;
 }
 
-/* Glassmorphism utilities */
+/* =============================
+   GLASSMORPHISM UTILITIES
+   ============================= */
+
 @layer components {
   .glass-panel {
-    @apply bg-black/30 backdrop-blur-xl border border-white/10 rounded-2xl;
+    @apply backdrop-blur-xl rounded-2xl;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
   }
 
   .glass-panel-solid {
-    @apply bg-navy-900/80 backdrop-blur-xl border border-white/10 rounded-2xl;
+    @apply backdrop-blur-xl rounded-2xl;
+    background: rgba(13, 27, 42, 0.8);
+    border: 1px solid var(--glass-border);
   }
 
   .glass-button {
-    @apply bg-white/5 backdrop-blur-md border border-white/10 rounded-xl
-           hover:bg-white/10 hover:border-accent/30 transition-all duration-200;
+    @apply backdrop-blur-md rounded-xl transition-all duration-200;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+  }
+
+  .glass-button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(var(--accent), 0.3);
   }
 
   .glass-input {
-    @apply bg-white/5 backdrop-blur-md border border-white/10 rounded-xl
-           focus:border-accent/50 focus:ring-1 focus:ring-accent/20
-           outline-none transition-all duration-200 text-white placeholder-gray-500;
+    @apply backdrop-blur-md rounded-xl outline-none transition-all duration-200 placeholder-gray-500;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    color: var(--text-primary);
+  }
+
+  .glass-input:focus {
+    border-color: rgba(0, 170, 255, 0.5);
+    box-shadow: 0 0 0 2px rgba(0, 170, 255, 0.1);
   }
 
   .glow-accent {
@@ -65,7 +149,121 @@ body {
   }
 }
 
-/* Scrollbar styling */
+/* =============================
+   THEME-SPECIFIC OVERRIDES
+   ============================= */
+
+/* --- TERMINAL THEME --- */
+[data-theme="terminal"] .chat-message-user {
+  font-family: 'Fira Code', monospace;
+  border-radius: 4px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  background: transparent;
+}
+
+[data-theme="terminal"] .chat-message-ai {
+  font-family: 'Fira Code', monospace;
+  border-radius: 4px;
+  padding: 8px 12px;
+  background: transparent;
+  border-left: 3px solid rgba(91, 155, 213, 0.3);
+}
+
+[data-theme="terminal"] .chat-message-user::before {
+  content: '$ ';
+  color: var(--accent);
+  font-weight: bold;
+}
+
+[data-theme="terminal"] .chat-message-ai::before {
+  content: '> ';
+  color: rgba(91, 155, 213, 0.6);
+}
+
+[data-theme="terminal"] .action-bubble {
+  font-family: 'Fira Code', monospace;
+  border: 1px dashed rgba(91, 155, 213, 0.3);
+  color: #c8d6e5;
+  font-size: 12px;
+}
+
+/* --- MIDNIGHT THEME --- */
+[data-theme="midnight"] .glass-panel,
+[data-theme="midnight"] .glass-panel-solid {
+  background: transparent;
+  border: 1px solid transparent;
+  border-image: linear-gradient(135deg, #3b82f6, #ffffff, #3b82f6) 1;
+}
+
+[data-theme="midnight"] .chat-message-user,
+[data-theme="midnight"] .chat-message-ai {
+  background: transparent;
+  border: 1px solid transparent;
+  border-image: linear-gradient(135deg, rgba(59, 130, 246, 0.5), rgba(255, 255, 255, 0.3)) 1;
+}
+
+[data-theme="midnight"] .sidebar-container {
+  background: rgba(0, 0, 0, 0.8);
+  border-right: 1px solid transparent;
+  border-image: linear-gradient(to bottom, #3b82f6, #ffffff) 1;
+}
+
+/* --- MIZZY THEME --- */
+[data-theme="mizzy"] body,
+[data-theme="mizzy"] {
+  background: #0d0015;
+}
+
+[data-theme="mizzy"] .mizzy-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(13, 0, 21, 0.8) 0%, rgba(26, 0, 37, 0.6) 50%, rgba(13, 0, 21, 0.9) 100%),
+    url('/mizzy_bg.png') center/cover no-repeat;
+}
+
+[data-theme="mizzy"] .chat-message-user {
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  text-shadow: 0 0 8px rgba(168, 85, 247, 0.2);
+}
+
+[data-theme="mizzy"] .chat-message-ai {
+  background: rgba(192, 132, 252, 0.05);
+  border: 1px solid rgba(192, 132, 252, 0.15);
+}
+
+/* =============================
+   TERMINAL INTRO BANNER
+   ============================= */
+
+.terminal-intro {
+  font-family: 'Fira Code', monospace;
+  font-size: 13px;
+  color: #5b9bd5;
+  white-space: pre;
+  line-height: 1.4;
+  padding: 20px;
+  text-align: center;
+  opacity: 0.8;
+}
+
+.terminal-intro .box {
+  display: inline-block;
+  text-align: left;
+  border: 1px solid rgba(91, 155, 213, 0.3);
+  padding: 12px 20px;
+  border-radius: 4px;
+  background: rgba(91, 155, 213, 0.04);
+}
+
+/* =============================
+   SCROLLBAR
+   ============================= */
+
 ::-webkit-scrollbar {
   width: 6px;
 }
@@ -83,7 +281,6 @@ body {
   background: rgba(255, 255, 255, 0.25);
 }
 
-/* Firefox scrollbar */
 * {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
@@ -112,6 +309,28 @@ body {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* Typewriter cursor animation */
+@keyframes blink {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+}
+
+.animate-typewriter-cursor {
+  animation: blink 0.8s step-end infinite;
 }

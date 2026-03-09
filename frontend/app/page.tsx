@@ -14,6 +14,7 @@ import SettingsPanel from "@/components/SettingsPanel";
 import PreviewSidebar from "@/components/PreviewSidebar";
 import GlassCard from "@/components/GlassCard";
 import * as api from "@/lib/api";
+import { useThemeStore } from "@/lib/themeStore";
 
 export type ActiveView = "chat" | "agents" | "workflows" | "knowledge" | "training" | "roblox" | "settings";
 
@@ -108,6 +109,7 @@ function LoginScreen({ onLogin }: { onLogin: (username: string) => void }) {
               type="submit"
               disabled={loading || !username || !password}
               className="w-full py-3 rounded-xl bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-30 transition-all text-sm font-medium"
+              style={{ color: "var(--accent)" }}
             >
               {loading ? "..." : isRegister ? "Create Account" : "Sign In"}
             </button>
@@ -129,6 +131,7 @@ export default function Home() {
   const [activeView, setActiveView] = useState<ActiveView>("chat");
   const [authed, setAuthed] = useState<boolean | null>(null); // null = checking
   const [username, setUsername] = useState<string | null>(null);
+  const theme = useThemeStore((s) => s.theme);
 
   useEffect(() => {
     const token = localStorage.getItem("pub_token");
@@ -141,6 +144,14 @@ export default function Home() {
     }
   }, []);
 
+  // Apply theme to document
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    document.body.style.fontFamily = getComputedStyle(document.documentElement)
+      .getPropertyValue("--font-body")
+      .trim() || "'Inter', sans-serif";
+  }, [theme]);
+
   const handleLogin = (user: string) => {
     setUsername(user);
     setAuthed(true);
@@ -149,7 +160,7 @@ export default function Home() {
   // Still checking auth
   if (authed === null) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-[#0a0a1a]">
+      <div className="h-screen w-screen flex items-center justify-center" style={{ background: "var(--bg-primary)" }}>
         <div className="font-arcade text-lg text-white animate-pulse" style={{ textShadow: "0 0 15px rgba(255,255,255,0.2)" }}>
           Pub++
         </div>
@@ -182,8 +193,11 @@ export default function Home() {
   };
 
   return (
-    <main className="relative h-screen w-screen overflow-hidden">
-      <BinaryRain />
+    <main className="relative h-screen w-screen overflow-hidden" data-theme={theme}>
+      {/* Mizzy Way background */}
+      {theme === "mizzy" && <div className="mizzy-bg" />}
+      {/* Binary rain (hide on midnight for clean look, show tinted on mizzy) */}
+      {theme !== "midnight" && <BinaryRain />}
       <div className="relative z-10 flex h-full">
         <Sidebar activeView={activeView} onViewChange={setActiveView} />
         <div className="flex-1 flex flex-col overflow-hidden relative">
