@@ -10,6 +10,7 @@ import WorkflowBuilder from "@/components/WorkflowBuilder";
 import KnowledgeUpload from "@/components/KnowledgeUpload";
 import TrainingPanel from "@/components/TrainingPanel";
 import ApiKeyPanel from "@/components/ApiKeyPanel";
+import PreviewSidebar from "@/components/PreviewSidebar";
 import GlassCard from "@/components/GlassCard";
 import * as api from "@/lib/api";
 
@@ -181,8 +182,9 @@ export default function Home() {
       <BinaryRain />
       <div className="relative z-10 flex h-full">
         <Sidebar activeView={activeView} onViewChange={setActiveView} />
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden relative">
           {renderView()}
+          <PreviewSidebar />
         </div>
       </div>
     </main>

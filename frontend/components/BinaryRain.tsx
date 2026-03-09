@@ -39,7 +39,7 @@ export default function BinaryRain() {
         const y = drops[i] * fontSize;
 
         // Blue-green tint gradient based on position
-        const hue = 160 + Math.sin(i * 0.1) * 30; // oscillate between cyan and green
+        const hue = 210 + Math.sin(i * 0.1) * 15; // oscillate in blue range
         const alpha = Math.max(0, 1 - drops[i] / (canvas!.height / fontSize));
         ctx!.fillStyle = `hsla(${hue}, 80%, 60%, ${alpha * 0.4})`;
         ctx!.font = `${fontSize}px monospace`;

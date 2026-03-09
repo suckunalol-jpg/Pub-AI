@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, memo } from "react";
 import { motion } from "framer-motion";
 import { ThumbsUp, ThumbsDown, Bot } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -22,7 +22,7 @@ interface ChatMessageProps {
   isStreaming?: boolean;
 }
 
-export default function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessageProps) {
+function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessageProps) {
   const [feedback, setFeedback] = useState<1 | 2 | null>(null);
   const isUser = message.role === "user";
 
@@ -31,11 +31,19 @@ export default function ChatMessage({ message, onFeedback, isStreaming = false }
     onFeedback?.(message.id, rating);
   };
 
+  // When streaming, skip the motion.div animation to prevent shaking
+  const Wrapper = isStreaming ? "div" : motion.div;
+  const wrapperProps = isStreaming
+    ? {}
+    : {
+        initial: { opacity: 0, y: 8 },
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: 0.2 },
+      };
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2 }}
+    <Wrapper
+      {...(wrapperProps as any)}
       className={cn("flex gap-3 px-4 py-3", isUser ? "justify-end" : "justify-start")}
     >
       {/* AI avatar */}
@@ -63,11 +71,15 @@ export default function ChatMessage({ message, onFeedback, isStreaming = false }
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
+              pre({ children }) {
+                return <div className="not-prose">{children}</div>;
+              },
               code({ className, children, ...props }) {
                 const match = /language-(\w+)/.exec(className || "");
                 const codeString = String(children).replace(/\n$/, "");
-                if (match) {
-                  return <CodeBlock code={codeString} language={match[1]} />;
+                const isBlock = match || codeString.includes("\n");
+                if (isBlock) {
+                  return <CodeBlock code={codeString} language={match?.[1] || "text"} />;
                 }
                 return (
                   <code
@@ -133,6 +145,8 @@ export default function ChatMessage({ message, onFeedback, isStreaming = false }
           )}
         </div>
       </div>
-    </motion.div>
+    </Wrapper>
   );
 }
+
+export default memo(ChatMessage);

@@ -1,17 +1,28 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Send, Plus, Square } from "lucide-react";
+import { useState, useRef, useEffect, useCallback, memo } from "react";
+import { AnimatePresence } from "framer-motion";
+import { Plus } from "lucide-react";
 import ChatMessage, { type Message } from "./ChatMessage";
-import ActionIndicator, { type AiPhase } from "./ActionIndicator";
-import GlassCard from "./GlassCard";
+import ChatInputBar from "./ChatInputBar";
+import ActionIndicator, { type AiPhase, type ActionEntry } from "./ActionIndicator";
 import { generateId } from "@/lib/utils";
 import * as api from "@/lib/api";
 
+// Phase-to-summary mapping for action entries
+const phaseSummaries: Record<AiPhase, string> = {
+  thinking: "Analyzing your request...",
+  coding: "Writing code...",
+  executing: "Running code...",
+  searching: "Searching knowledge base...",
+  reviewing: "Reviewing output...",
+};
+
+// Memoize ChatMessage for the messages list
+const MemoizedChatMessage = memo(ChatMessage);
+
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
 
@@ -19,24 +30,19 @@ export default function ChatInterface() {
   const [aiPhase, setAiPhase] = useState<AiPhase>("thinking");
   const [streamingContent, setStreamingContent] = useState("");
   const [liveCode, setLiveCode] = useState("");
+  const [actions, setActions] = useState<ActionEntry[]>([]);
   const abortRef = useRef<AbortController | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-scroll to bottom on new messages or streaming content
+  // Auto-scroll: use "auto" during streaming to prevent shaking, "smooth" after completion
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingContent]);
-
-  // Auto-resize textarea
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = "auto";
-      textarea.style.height = Math.min(textarea.scrollHeight, 160) + "px";
+    if (isLoading) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+    } else if (messages.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [input]);
+  }, [messages, streamingContent, isLoading]);
 
   // Cleanup abort controller on unmount
   useEffect(() => {
@@ -49,10 +55,10 @@ export default function ChatInterface() {
     abortRef.current?.abort();
     setMessages([]);
     setConversationId(null);
-    setInput("");
     setIsLoading(false);
     setStreamingContent("");
     setLiveCode("");
+    setActions([]);
   };
 
   const handleStop = useCallback(() => {
@@ -75,93 +81,128 @@ export default function ChatInterface() {
 
     setIsLoading(false);
     setLiveCode("");
+    setActions([]);
   }, []);
 
-  const handleSend = useCallback(async () => {
-    const trimmed = input.trim();
-    if (!trimmed || isLoading) return;
+  const handleSend = useCallback(
+    async (text: string) => {
+      if (!text.trim() || isLoading) return;
 
-    const userMessage: Message = {
-      id: generateId(),
-      role: "user",
-      content: trimmed,
-      timestamp: new Date(),
-    };
+      const userMessage: Message = {
+        id: generateId(),
+        role: "user",
+        content: text,
+        timestamp: new Date(),
+      };
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setIsLoading(true);
-    setAiPhase("thinking");
-    setStreamingContent("");
-    setLiveCode("");
-
-    // Accumulate tokens in a ref-accessible variable for the callbacks
-    let accumulatedContent = "";
-
-    const controller = api.streamMessage(conversationId, trimmed, {
-      onStatus(phase, convId) {
-        setAiPhase(phase);
-        if (convId) {
-          setConversationId(convId);
-        }
-      },
-      onToken(content) {
-        accumulatedContent += content;
-        setStreamingContent(accumulatedContent);
-      },
-      onCode(_language, content) {
-        setLiveCode(content);
-      },
-      onDone(messageId, _model, convId) {
-        setConversationId(convId);
-
-        const aiMessage: Message = {
-          id: messageId,
-          role: "assistant",
-          content: accumulatedContent,
+      setMessages((prev) => [...prev, userMessage]);
+      setIsLoading(true);
+      setAiPhase("thinking");
+      setStreamingContent("");
+      setLiveCode("");
+      setActions([
+        {
+          id: generateId(),
+          phase: "thinking",
+          summary: phaseSummaries.thinking,
           timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, aiMessage]);
-        setStreamingContent("");
-        setLiveCode("");
-        setIsLoading(false);
-        abortRef.current = null;
-      },
-      onError(detail) {
-        // If we already have partial content, show it
-        if (accumulatedContent.trim()) {
-          const partialMsg: Message = {
-            id: generateId(),
+        },
+      ]);
+
+      // Accumulate tokens in a ref-accessible variable for the callbacks
+      let accumulatedContent = "";
+
+      const controller = api.streamMessage(conversationId, text, {
+        onStatus(phase, convId) {
+          setAiPhase(phase);
+          if (convId) {
+            setConversationId(convId);
+          }
+
+          // Add a new action entry for this phase
+          setActions((prev) => {
+            // Avoid duplicate consecutive phases
+            if (prev.length > 0 && prev[prev.length - 1].phase === phase) {
+              return prev;
+            }
+            return [
+              ...prev,
+              {
+                id: generateId(),
+                phase,
+                summary: phaseSummaries[phase] || phase,
+                timestamp: new Date(),
+              },
+            ];
+          });
+        },
+        onToken(content) {
+          accumulatedContent += content;
+          setStreamingContent(accumulatedContent);
+
+          // Update the latest action's details with streaming content snippet
+          setActions((prev) => {
+            if (prev.length === 0) return prev;
+            const updated = [...prev];
+            const last = { ...updated[updated.length - 1] };
+            // Only update details for certain phases
+            if (last.phase === "coding" || last.phase === "thinking") {
+              last.details = accumulatedContent.slice(-500);
+              updated[updated.length - 1] = last;
+            }
+            return updated;
+          });
+        },
+        onCode(_language, content) {
+          setLiveCode(content);
+        },
+        onDone(messageId, _model, convId) {
+          setConversationId(convId);
+
+          const aiMessage: Message = {
+            id: messageId,
             role: "assistant",
             content: accumulatedContent,
             timestamp: new Date(),
           };
-          setMessages((prev) => [...prev, partialMsg]);
-        } else {
-          const errorMessage: Message = {
-            id: generateId(),
-            role: "assistant",
-            content: `Sorry, something went wrong: ${detail}`,
-            timestamp: new Date(),
-          };
-          setMessages((prev) => [...prev, errorMessage]);
-        }
-        setStreamingContent("");
-        setLiveCode("");
-        setIsLoading(false);
-        abortRef.current = null;
-      },
-    });
+          setMessages((prev) => [...prev, aiMessage]);
+          setStreamingContent("");
+          setLiveCode("");
+          setIsLoading(false);
+          setActions([]);
+          abortRef.current = null;
+        },
+        onError(detail) {
+          // If we already have partial content, show it
+          if (accumulatedContent.trim()) {
+            const partialMsg: Message = {
+              id: generateId(),
+              role: "assistant",
+              content: accumulatedContent,
+              timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, partialMsg]);
+          } else {
+            const errorMessage: Message = {
+              id: generateId(),
+              role: "assistant",
+              content: `Sorry, something went wrong: ${detail}`,
+              timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, errorMessage]);
+          }
+          setStreamingContent("");
+          setLiveCode("");
+          setIsLoading(false);
+          setActions([]);
+          abortRef.current = null;
+        },
+      });
 
-    abortRef.current = controller;
-  }, [input, isLoading, conversationId]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
+      abortRef.current = controller;
+    },
+    [isLoading, conversationId]
+  );
 
   const handleFeedback = async (messageId: string, rating: 1 | 2) => {
     try {
@@ -200,7 +241,7 @@ export default function ChatInterface() {
 
         <AnimatePresence>
           {messages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} onFeedback={handleFeedback} />
+            <MemoizedChatMessage key={msg.id} message={msg} onFeedback={handleFeedback} />
           ))}
         </AnimatePresence>
 
@@ -218,51 +259,20 @@ export default function ChatInterface() {
           />
         )}
 
-        {/* Action indicator: shows current phase */}
+        {/* Action indicator: shows current phase with timeline */}
         {isLoading && (
-          <AnimatePresence mode="wait">
-            <ActionIndicator
-              key={aiPhase}
-              phase={aiPhase}
-              liveCode={liveCode}
-            />
-          </AnimatePresence>
+          <ActionIndicator
+            phase={aiPhase}
+            actions={actions}
+            liveCode={liveCode}
+          />
         )}
 
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input bar */}
-      <div className="px-4 pb-4 pt-2">
-        <GlassCard className="flex items-end gap-3 px-4 py-3">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Send a message..."
-            rows={1}
-            className="flex-1 bg-transparent text-sm text-white placeholder-gray-500 resize-none outline-none max-h-40"
-          />
-          {isLoading ? (
-            <button
-              onClick={handleStop}
-              className="flex-shrink-0 p-2 rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-all"
-              title="Stop generating"
-            >
-              <Square size={18} />
-            </button>
-          ) : (
-            <button
-              onClick={handleSend}
-              disabled={!input.trim()}
-              className="flex-shrink-0 p-2 rounded-xl bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-            >
-              <Send size={18} />
-            </button>
-          )}
-        </GlassCard>
-      </div>
+      {/* Input bar -- extracted component to prevent re-renders on typing */}
+      <ChatInputBar onSend={handleSend} onStop={handleStop} isLoading={isLoading} />
     </div>
   );
 }

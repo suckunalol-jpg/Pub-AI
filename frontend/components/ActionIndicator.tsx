@@ -1,13 +1,24 @@
 "use client";
 
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Brain, Code, Terminal, Search, Eye } from "lucide-react";
+import { Brain, Code, Terminal, Search, Eye, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type AiPhase = "thinking" | "coding" | "executing" | "searching" | "reviewing";
 
+export interface ActionEntry {
+  id: string;
+  phase: AiPhase;
+  summary: string;
+  details?: string;
+  timestamp: Date;
+}
+
 interface ActionIndicatorProps {
   phase: AiPhase;
+  /** List of all action entries in chronological order */
+  actions: ActionEntry[];
   /** Optional live code preview text shown during coding phase */
   liveCode?: string;
   className?: string;
@@ -49,13 +60,170 @@ const phaseConfig: Record<
   },
 };
 
+function ActionItem({
+  entry,
+  isLatest,
+}: {
+  entry: ActionEntry;
+  isLatest: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const config = phaseConfig[entry.phase];
+  const Icon = config.icon;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: isLatest ? 1 : 0.5, y: 0 }}
+      transition={{ duration: 0.15 }}
+      className="flex items-start gap-2.5"
+    >
+      {/* Timeline dot */}
+      <div className="flex flex-col items-center flex-shrink-0">
+        <div
+          className={cn(
+            "w-6 h-6 rounded-full flex items-center justify-center",
+            isLatest ? "" : "opacity-60"
+          )}
+          style={{ background: config.glowColor }}
+        >
+          {isLatest ? (
+            <motion.div
+              animate={{ scale: [1, 1.1, 1] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <Icon size={13} className={config.color} />
+            </motion.div>
+          ) : (
+            <Icon size={13} className={config.color} />
+          )}
+        </div>
+        {/* Vertical connector line (hidden on latest since it's at the bottom) */}
+        {!isLatest && (
+          <div className="w-px h-3 bg-white/10 mt-0.5" />
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0 pb-1">
+        <button
+          onClick={() => entry.details && setExpanded(!expanded)}
+          className={cn(
+            "flex items-center gap-1.5 text-left w-full",
+            entry.details ? "cursor-pointer" : "cursor-default"
+          )}
+        >
+          {entry.details && (
+            expanded ? (
+              <ChevronDown size={12} className="text-gray-500 flex-shrink-0" />
+            ) : (
+              <ChevronRight size={12} className="text-gray-500 flex-shrink-0" />
+            )
+          )}
+          <span
+            className={cn(
+              "text-sm",
+              isLatest ? config.color : "text-gray-500"
+            )}
+          >
+            {entry.summary}
+          </span>
+          {/* Animated dots for the latest active entry */}
+          {isLatest && (
+            <span className="flex gap-0.5 ml-1">
+              {[0, 1, 2].map((i) => (
+                <motion.span
+                  key={i}
+                  className={cn("inline-block w-1 h-1 rounded-full", config.color)}
+                  style={{ backgroundColor: "currentColor" }}
+                  animate={{ opacity: [0.2, 1, 0.2] }}
+                  transition={{
+                    duration: 1.2,
+                    repeat: Infinity,
+                    delay: i * 0.2,
+                    ease: "easeInOut",
+                  }}
+                />
+              ))}
+            </span>
+          )}
+        </button>
+
+        {/* Expandable details */}
+        <AnimatePresence>
+          {expanded && entry.details && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="overflow-hidden"
+            >
+              <div className="mt-1.5 max-h-40 overflow-y-auto bg-black/30 border border-white/5 rounded-lg px-3 py-2">
+                <pre className="text-xs text-gray-400 font-mono whitespace-pre-wrap break-all">
+                  {entry.details}
+                </pre>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function ActionIndicator({
   phase,
+  actions,
   liveCode,
   className,
 }: ActionIndicatorProps) {
   const config = phaseConfig[phase];
-  const Icon = config.icon;
+
+  // If no actions yet, fall back to showing just the phase label
+  if (actions.length === 0) {
+    const Icon = config.icon;
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -4 }}
+        transition={{ duration: 0.2 }}
+        className={cn("flex items-center gap-3 px-8 py-3", className)}
+      >
+        <div
+          className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center"
+          style={{ background: config.glowColor }}
+        >
+          <motion.div
+            animate={{ scale: [1, 1.1, 1] }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <Icon size={13} className={config.color} />
+          </motion.div>
+        </div>
+        <span className={cn("text-sm font-medium", config.color)}>
+          {config.label}
+        </span>
+        <span className="flex gap-0.5">
+          {[0, 1, 2].map((i) => (
+            <motion.span
+              key={i}
+              className={cn("inline-block w-1 h-1 rounded-full", config.color)}
+              style={{ backgroundColor: "currentColor" }}
+              animate={{ opacity: [0.2, 1, 0.2] }}
+              transition={{
+                duration: 1.2,
+                repeat: Infinity,
+                delay: i * 0.2,
+                ease: "easeInOut",
+              }}
+            />
+          ))}
+        </span>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -63,115 +231,39 @@ export default function ActionIndicator({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
       transition={{ duration: 0.2 }}
-      className={cn("flex items-start gap-3 px-8 py-3", className)}
+      className={cn("flex flex-col gap-0 px-8 py-3", className)}
     >
-      {/* Animated icon container */}
-      <div
-        className="relative flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-0.5"
-        style={{ background: `${config.glowColor}` }}
-      >
-        {/* Pulse ring */}
-        <motion.div
-          className="absolute inset-0 rounded-full"
-          style={{ border: `1.5px solid ${config.glowColor}` }}
-          animate={{
-            scale: [1, 1.5, 1],
-            opacity: [0.6, 0, 0.6],
-          }}
-          transition={{
-            duration: 2,
-            repeat: Infinity,
-            ease: "easeInOut",
-          }}
+      {actions.map((entry, idx) => (
+        <ActionItem
+          key={entry.id}
+          entry={entry}
+          isLatest={idx === actions.length - 1}
         />
+      ))}
 
-        {/* Icon with phase-specific animation */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={phase}
-            initial={{ scale: 0.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.5, opacity: 0 }}
-            transition={{ duration: 0.15 }}
-          >
-            {phase === "searching" ? (
-              /* Search: subtle horizontal sweep */
-              <motion.div
-                animate={{ x: [-1, 1, -1] }}
-                transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
-              >
-                <Icon size={16} className={config.color} />
-              </motion.div>
-            ) : phase === "executing" ? (
-              /* Terminal: blink effect */
-              <motion.div
-                animate={{ opacity: [1, 0.4, 1] }}
-                transition={{ duration: 0.8, repeat: Infinity, ease: "steps(2)" }}
-              >
-                <Icon size={16} className={config.color} />
-              </motion.div>
-            ) : (
-              /* Default: gentle pulse for thinking/coding/reviewing */
-              <motion.div
-                animate={{ scale: [1, 1.1, 1] }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-              >
-                <Icon size={16} className={config.color} />
-              </motion.div>
-            )}
-          </motion.div>
-        </AnimatePresence>
-      </div>
-
-      {/* Label and optional live preview */}
-      <div className="flex flex-col gap-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className={cn("text-sm font-medium", config.color)}>
-            {config.label}
-          </span>
-          {/* Animated dots */}
-          <span className="flex gap-0.5">
-            {[0, 1, 2].map((i) => (
-              <motion.span
-                key={i}
-                className={cn("inline-block w-1 h-1 rounded-full", config.color)}
-                style={{ backgroundColor: "currentColor" }}
-                animate={{ opacity: [0.2, 1, 0.2] }}
-                transition={{
-                  duration: 1.2,
-                  repeat: Infinity,
-                  delay: i * 0.2,
-                  ease: "easeInOut",
-                }}
-              />
-            ))}
-          </span>
-        </div>
-
-        {/* Live code preview during coding phase */}
-        {phase === "coding" && liveCode && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            className="max-w-md"
-          >
-            <div className="bg-black/40 border border-white/5 rounded-lg px-3 py-2 font-mono text-xs text-gray-400 overflow-hidden">
-              <span className="whitespace-pre-wrap break-all line-clamp-3">
-                {liveCode.slice(-200)}
-              </span>
-              <span className="inline-block w-1.5 h-3.5 bg-emerald-400/70 ml-0.5 animate-terminal-blink" />
-            </div>
-          </motion.div>
-        )}
-
-        {/* Terminal cursor for executing phase */}
-        {phase === "executing" && (
-          <div className="flex items-center gap-1 text-xs text-gray-500 font-mono">
-            <span>$</span>
-            <span className="inline-block w-1.5 h-3 bg-amber-400/70 animate-terminal-blink" />
+      {/* Live code preview during coding phase */}
+      {phase === "coding" && liveCode && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          className="ml-8 mt-1 max-w-md"
+        >
+          <div className="bg-black/40 border border-white/5 rounded-lg px-3 py-2 font-mono text-xs text-gray-400 overflow-hidden">
+            <span className="whitespace-pre-wrap break-all line-clamp-3">
+              {liveCode.slice(-200)}
+            </span>
+            <span className="inline-block w-1.5 h-3.5 bg-emerald-400/70 ml-0.5 animate-terminal-blink" />
           </div>
-        )}
-      </div>
+        </motion.div>
+      )}
+
+      {/* Terminal cursor for executing phase */}
+      {phase === "executing" && (
+        <div className="ml-8 mt-1 flex items-center gap-1 text-xs text-gray-500 font-mono">
+          <span>$</span>
+          <span className="inline-block w-1.5 h-3 bg-amber-400/70 animate-terminal-blink" />
+        </div>
+      )}
     </motion.div>
   );
 }
