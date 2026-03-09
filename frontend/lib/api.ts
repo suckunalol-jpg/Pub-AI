@@ -205,28 +205,7 @@ export function sendFeedback(messageId: string, rating: 1 | 2) {
   });
 }
 
-// Agents
-export function spawnAgent(agentType: string, task: string) {
-  return request<{ id: string; agent_type: string; agent_name: string; status: string }>("/api/agents/spawn", {
-    method: "POST",
-    body: { agent_type: agentType, task },
-  });
-}
-
-export function getAgentStatus(id: string) {
-  return request<{ id: string; status: string; result?: Record<string, any> }>(`/api/agents/${id}`);
-}
-
-export function messageAgent(id: string, message: string) {
-  return request<{ response: string }>(`/api/agents/${id}/message`, {
-    method: "POST",
-    body: { message },
-  });
-}
-
-export function stopAgent(id: string) {
-  return request(`/api/agents/${id}`, { method: "DELETE" });
-}
+// Agents — see bottom of file for agent API functions
 
 // Teams
 export function createTeam(name: string, agents: { type: string; role: string }[]) {
@@ -489,4 +468,48 @@ export async function uploadFile(file: File): Promise<UploadResult> {
   }
 
   return res.json();
+}
+
+// ---------- Agent API ----------
+
+export interface AgentStatus {
+  id: string;
+  agent_type: string;
+  agent_name: string;
+  status: string;
+  result: Record<string, unknown> | null;
+}
+
+export function getAgentStatus(agentId: string) {
+  return request<AgentStatus>(`/api/agents/${agentId}`);
+}
+
+export function getAgentState(agentId: string) {
+  return request<Record<string, unknown>>(`/api/agents/${agentId}/state`);
+}
+
+export function listAgents() {
+  return request<AgentStatus[]>("/api/agents/list");
+}
+
+export function messageAgent(agentId: string, message: string) {
+  return request<{ response: string }>(`/api/agents/${agentId}/message`, {
+    method: "POST",
+    body: JSON.stringify({ message }),
+  });
+}
+
+export function spawnAgent(agentType: string, task: string, conversationId?: string) {
+  return request<AgentStatus>("/api/agents/spawn", {
+    method: "POST",
+    body: JSON.stringify({
+      agent_type: agentType,
+      task,
+      conversation_id: conversationId,
+    }),
+  });
+}
+
+export function stopAgent(agentId: string) {
+  return request(`/api/agents/${agentId}`, { method: "DELETE" });
 }

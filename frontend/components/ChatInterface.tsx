@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, memo } from "react";
+import { useState, useRef, useEffect, useCallback, memo, useMemo } from "react";
 import { AnimatePresence } from "framer-motion";
 import { Plus } from "lucide-react";
 import ChatMessage, { type Message } from "./ChatMessage";
@@ -44,15 +44,22 @@ export default function ChatInterface() {
   const [streamingContent, setStreamingContent] = useState("");
   const [liveCode, setLiveCode] = useState("");
   const [actions, setActions] = useState<ActionEntry[]>([]);
+  const [showActions, setShowActions] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const sendRef = useRef<(text: string) => void>(() => { });
+  const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lastScrollRef = useRef(0);
 
-  // Auto-scroll: use "auto" during streaming to prevent shaking, "smooth" after completion
+  // Throttled auto-scroll: only scroll every 300ms during streaming to prevent shaking
   useEffect(() => {
+    const now = Date.now();
     if (isLoading) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      if (now - lastScrollRef.current > 300) {
+        lastScrollRef.current = now;
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      }
     } else if (messages.length > 0) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
@@ -183,6 +190,9 @@ export default function ChatInterface() {
       setAiPhase("thinking");
       setStreamingContent("");
       setLiveCode("");
+      setShowActions(true);
+      // Clear any pending fade-out timer
+      if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
       setActions([
         {
           id: generateId(),
@@ -252,8 +262,13 @@ export default function ChatInterface() {
           setStreamingContent("");
           setLiveCode("");
           setIsLoading(false);
-          setActions([]);
           abortRef.current = null;
+
+          // Fade out actions after 1.5s instead of clearing instantly
+          fadeTimerRef.current = setTimeout(() => {
+            setShowActions(false);
+            setActions([]);
+          }, 1500);
         },
         onError(detail) {
           // If we already have partial content, show it
@@ -356,13 +371,15 @@ export default function ChatInterface() {
         )}
 
         {/* Action indicator: shows current phase with timeline */}
-        {isLoading && (
-          <ActionIndicator
-            phase={aiPhase}
-            actions={actions}
-            liveCode={liveCode}
-          />
-        )}
+        <AnimatePresence>
+          {showActions && actions.length > 0 && (
+            <ActionIndicator
+              phase={aiPhase}
+              actions={actions}
+              liveCode={liveCode}
+            />
+          )}
+        </AnimatePresence>
 
         <div ref={messagesEndRef} />
       </div>

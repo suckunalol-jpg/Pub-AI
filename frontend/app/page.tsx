@@ -6,6 +6,8 @@ import BinaryRain from "@/components/BinaryRain";
 import Sidebar from "@/components/Sidebar";
 import ChatInterface from "@/components/ChatInterface";
 import AgentPanel from "@/components/AgentPanel";
+import AgentTabBar from "@/components/AgentTabBar";
+import AgentChatTab from "@/components/AgentChatTab";
 import WorkflowBuilder from "@/components/WorkflowBuilder";
 import KnowledgeUpload from "@/components/KnowledgeUpload";
 import TrainingPanel from "@/components/TrainingPanel";
@@ -15,6 +17,7 @@ import PreviewSidebar from "@/components/PreviewSidebar";
 import GlassCard from "@/components/GlassCard";
 import * as api from "@/lib/api";
 import { useThemeStore } from "@/lib/themeStore";
+import { useAgentTabStore } from "@/lib/agentTabStore";
 
 export type ActiveView = "chat" | "agents" | "workflows" | "knowledge" | "training" | "roblox" | "settings";
 
@@ -132,6 +135,7 @@ export default function Home() {
   const [authed, setAuthed] = useState<boolean | null>(null); // null = checking
   const [username, setUsername] = useState<string | null>(null);
   const theme = useThemeStore((s) => s.theme);
+  const { tabs, activeTabId } = useAgentTabStore();
 
   useEffect(() => {
     const token = localStorage.getItem("pub_token");
@@ -175,8 +179,14 @@ export default function Home() {
 
   const renderView = () => {
     switch (activeView) {
-      case "chat":
+      case "chat": {
+        // If an agent tab is active, show that agent's chat
+        const activeAgentTab = tabs.find((t) => t.id === activeTabId);
+        if (activeAgentTab) {
+          return <AgentChatTab tab={activeAgentTab} />;
+        }
         return <ChatInterface />;
+      }
       case "agents":
         return <AgentPanel />;
       case "workflows":
@@ -201,6 +211,8 @@ export default function Home() {
       <div className="relative z-10 flex h-full">
         <Sidebar activeView={activeView} onViewChange={setActiveView} />
         <div className="flex-1 flex flex-col overflow-hidden relative">
+          {/* Agent tab bar — shown when chat view has agent tabs */}
+          {activeView === "chat" && <AgentTabBar />}
           {renderView()}
           <PreviewSidebar />
         </div>

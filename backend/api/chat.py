@@ -370,27 +370,20 @@ async def stream_message(
                     current_phase = new_phase
                     yield _sse_event("status", {"phase": current_phase})
 
-                # Accumulate code content when in coding phase
+                # Accumulate code content when in coding phase (for live preview)
                 if in_code_block:
                     # Detect language from first line after opening fence
                     if not code_language and code_buffer == "" and token.strip() and "```" not in token:
-                        # The first token after ``` is often the language identifier
                         stripped = token.strip()
                         if stripped.isalpha() and len(stripped) < 20:
                             code_language = stripped
-                        else:
-                            code_buffer += token
-                    else:
-                        # Filter out the fence markers themselves
-                        cleaned = token.replace("```", "")
-                        code_buffer += cleaned
-                else:
-                    # Emit content tokens (filter out fence markers)
-                    emit_token = token.replace("```", "")
-                    if emit_token:
-                        yield _sse_event("token", {"content": emit_token})
+                    code_buffer += token.replace("```", "")
 
-            # Emit any remaining code buffer
+                # ALWAYS emit token events so content appears in the final message
+                if token:
+                    yield _sse_event("token", {"content": token})
+
+            # Emit any remaining code buffer as a code event (for live preview)
             if code_buffer.strip():
                 yield _sse_event("code", {
                     "language": code_language or "text",
