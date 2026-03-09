@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import CodeBlock from "./CodeBlock";
 import { cn, formatTimestamp } from "@/lib/utils";
+import { useThemeStore } from "@/lib/themeStore";
 
 export interface Message {
   id: string;
@@ -23,6 +24,7 @@ interface ChatMessageProps {
 
 function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessageProps) {
   const [feedback, setFeedback] = useState<1 | 2 | null>(null);
+  const theme = useThemeStore((s) => s.theme);
   const isUser = message.role === "user";
 
   const handleFeedback = (rating: 1 | 2) => {
@@ -40,6 +42,41 @@ function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessagePr
       transition: { duration: 0.2 },
     };
 
+  // Terminal Theme Layout
+  if (theme === "terminal") {
+    return (
+      <Wrapper {...(wrapperProps as any)} className="px-6 py-1.5 font-mono text-sm">
+        <div className="flex flex-col">
+          <div className={cn(
+            "chat-message-terminal",
+            isUser ? "chat-message-user" : "chat-message-ai"
+          )}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                pre({ children }) { return <div className="not-prose my-2">{children}</div>; },
+                code({ className, children, ...props }) {
+                  const match = /language-(\w+)/.exec(className || "");
+                  const codeString = String(children).replace(/\n$/, "");
+                  const isBlock = match || codeString.includes("\n");
+                  if (isBlock) return <CodeBlock code={codeString} language={match?.[1] || "text"} />;
+                  return <code className="text-blue-300 bg-blue-500/10 px-1 py-0.5 rounded" {...props}>{children}</code>;
+                },
+                p({ children }) { return <span className="mr-2 leading-relaxed">{children}</span>; },
+                ul({ children }) { return <ul className="list-disc ml-4 my-1 space-y-1 block w-full">{children}</ul>; },
+                ol({ children }) { return <ol className="list-decimal ml-4 my-1 space-y-1 block w-full">{children}</ol>; },
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
+            {isStreaming && <span className="inline-block w-2 h-4 bg-blue-400 ml-1 align-middle animate-typewriter-cursor" />}
+          </div>
+        </div>
+      </Wrapper>
+    );
+  }
+
+  // Standard Layout (Midnight, Mizzy, Default)
   return (
     <Wrapper
       {...(wrapperProps as any)}

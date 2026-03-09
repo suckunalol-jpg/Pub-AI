@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, memo, useMemo } from "react";
 import { AnimatePresence } from "framer-motion";
-import { Plus } from "lucide-react";
+import { Bot, Plus } from "lucide-react";
 import ChatMessage, { type Message } from "./ChatMessage";
 import ChatInputBar from "./ChatInputBar";
 import ActionIndicator, { type AiPhase, type ActionEntry } from "./ActionIndicator";
@@ -331,11 +331,17 @@ export default function ChatInterface() {
         {messages.length === 0 && !isLoading && (
           theme === "terminal" ? (
             <div className="flex h-full items-center justify-center">
-              <div className="terminal-intro">
-                ╔══════════════════════════════════════╗{"\n"}
-                ║  Pub AI v1.0  —  Terminal Mode      ║{"\n"}
-                ║  Type /help for available commands   ║{"\n"}
-                ╚══════════════════════════════════════╝
+              <div className="flex flex-col items-center gap-4">
+                <div className="text-4xl text-blue-500 terminal-avatar-bounce">
+                  {/* Claude Code style avatar (a simple expressive face or bot icon) */}
+                  <Bot size={48} className="text-blue-500 opacity-90" />
+                </div>
+                <div className="font-arcade text-3xl text-blue-500 terminal-avatar-blink" style={{ textShadow: "0 0 20px rgba(59, 130, 246, 0.5)" }}>
+                  Pub++
+                </div>
+                <div className="text-blue-400/60 font-mono text-xs mt-2">
+                  Type /help for commands
+                </div>
               </div>
             </div>
           ) : (

@@ -5,6 +5,7 @@ import { Send, Square, Slash, Paperclip, X, FileText, Image as ImageIcon } from 
 import { motion, AnimatePresence } from "framer-motion";
 import GlassCard from "./GlassCard";
 import * as api from "../lib/api";
+import { useThemeStore } from "@/lib/themeStore";
 
 // Hard-coded command list (matches backend) — avoids needing a fetch on every keystroke
 const SLASH_COMMANDS = [
@@ -38,6 +39,7 @@ export default function ChatInputBar({ onSend, onStop, onSlashCommand, isLoading
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
+  const theme = useThemeStore((s) => s.theme);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -196,8 +198,8 @@ export default function ChatInputBar({ onSend, onStop, onSlashCommand, isLoading
                     key={cmd.name}
                     onClick={() => insertCommand(cmd.name)}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${idx === selectedIndex
-                        ? "bg-white/10 text-white"
-                        : "text-gray-300 hover:bg-white/5"
+                      ? "bg-white/10 text-white"
+                      : "text-gray-300 hover:bg-white/5"
                       }`}
                   >
                     <span className="font-mono text-sm text-accent font-medium min-w-[80px]">
@@ -245,54 +247,82 @@ export default function ChatInputBar({ onSend, onStop, onSlashCommand, isLoading
         </div>
       )}
 
-      <GlassCard className="flex items-end gap-3 px-4 py-3">
-        {/* Hidden file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={(e) => handleFileSelect(e.target.files)}
-          accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.pdf,.txt,.md,.csv,.json,.py,.js,.ts,.tsx,.jsx,.html,.css,.lua,.rs,.go,.java,.cpp,.c,.h"
-        />
+      {/* Input container logic based on theme */}
+      {theme === "terminal" ? (
+        <div className="flex items-end gap-2 px-6 py-2 border-t border-blue-500/20 bg-[#000a20] font-mono">
+          <span className="text-blue-500 mb-2 whitespace-nowrap">
+            user@pub-ai:~$
+          </span>
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Type your command..."
+            rows={1}
+            className="flex-1 bg-transparent text-sm text-blue-100 placeholder-blue-800/50 resize-none outline-none max-h-40 mb-2 leading-relaxed"
+            spellCheck={false}
+          />
+          {isLoading ? (
+            <button onClick={onStop} className="p-2 mb-1 text-red-500 hover:text-red-400">
+              <Square size={16} />
+            </button>
+          ) : (
+            <button onClick={handleSubmit} disabled={!input.trim()} className="p-2 mb-1 text-blue-500 hover:text-blue-400 disabled:opacity-30">
+              <Send size={16} />
+            </button>
+          )}
+        </div>
+      ) : (
+        <GlassCard className="flex items-end gap-3 px-4 py-3 mx-4 mb-2">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => handleFileSelect(e.target.files)}
+            accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.pdf,.txt,.md,.csv,.json,.py,.js,.ts,.tsx,.jsx,.html,.css,.lua,.rs,.go,.java,.cpp,.c,.h"
+          />
 
-        {/* Attachment button */}
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          className="flex-shrink-0 p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 disabled:opacity-30 transition-all"
-          title="Attach file"
-        >
-          <Paperclip size={18} className={uploading ? "animate-spin" : ""} />
-        </button>
+          {/* Attachment button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="flex-shrink-0 p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 disabled:opacity-30 transition-all"
+            title="Attach file"
+          >
+            <Paperclip size={18} className={uploading ? "animate-spin" : ""} />
+          </button>
 
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Send a message... (type / for commands)"
-          rows={1}
-          className="flex-1 bg-transparent text-sm text-white placeholder-gray-500 resize-none outline-none max-h-40"
-        />
-        {isLoading ? (
-          <button
-            onClick={onStop}
-            className="flex-shrink-0 p-2 rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-all"
-            title="Stop generating"
-          >
-            <Square size={18} />
-          </button>
-        ) : (
-          <button
-            onClick={handleSubmit}
-            disabled={!input.trim() && attachments.length === 0}
-            className="flex-shrink-0 p-2 rounded-xl bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-          >
-            <Send size={18} />
-          </button>
-        )}
-      </GlassCard>
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Send a message... (type / for commands)"
+            rows={1}
+            className="flex-1 bg-transparent text-sm text-white placeholder-gray-500 resize-none outline-none max-h-40"
+          />
+          {isLoading ? (
+            <button
+              onClick={onStop}
+              className="flex-shrink-0 p-2 rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-all"
+              title="Stop generating"
+            >
+              <Square size={18} />
+            </button>
+          ) : (
+            <button
+              onClick={handleSubmit}
+              disabled={!input.trim() && attachments.length === 0}
+              className="flex-shrink-0 p-2 rounded-xl bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            >
+              <Send size={18} />
+            </button>
+          )}
+        </GlassCard>
+      )}
     </div>
   );
 }

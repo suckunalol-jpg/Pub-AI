@@ -28,16 +28,16 @@
 }
 
 [data-theme="terminal"] {
-  --bg-primary: #0c1220;
-  --bg-secondary: #0f1728;
-  --accent: #5b9bd5;
-  --accent-dark: #3d7ab8;
-  --glass-bg: rgba(91, 155, 213, 0.05);
-  --glass-border: rgba(91, 155, 213, 0.15);
+  --bg-primary: #000a20;
+  --bg-secondary: transparent;
+  --accent: #3b82f6;
+  --accent-dark: #2563eb;
+  --glass-bg: transparent;
+  --glass-border: transparent;
   --msg-user-bg: transparent;
-  --msg-user-border: rgba(91, 155, 213, 0.2);
+  --msg-user-border: transparent;
   --msg-ai-bg: transparent;
-  --msg-ai-border: rgba(91, 155, 213, 0.1);
+  --msg-ai-border: transparent;
   --text-primary: #c8d6e5;
   --text-secondary: #5b7a95;
   --font-body: 'Fira Code', 'Cascadia Code', monospace;
@@ -45,33 +45,33 @@
 
 [data-theme="midnight"] {
   --bg-primary: #000000;
-  --bg-secondary: #050505;
+  --bg-secondary: rgba(0, 0, 0, 0.5);
   --accent: #60a5fa;
   --accent-dark: #3b82f6;
   --glass-bg: rgba(0, 0, 0, 0.4);
-  --glass-border: rgba(96, 165, 250, 0.2);
+  --glass-border: rgba(255, 255, 255, 0.8);
   --msg-user-bg: transparent;
-  --msg-user-border: rgba(96, 165, 250, 0.3);
+  --msg-user-border: rgba(255, 255, 255, 0.8);
   --msg-ai-bg: transparent;
-  --msg-ai-border: rgba(255, 255, 255, 0.1);
+  --msg-ai-border: rgba(255, 255, 255, 0.3);
   --text-primary: #ffffff;
-  --text-secondary: #6b7280;
+  --text-secondary: #9ca3af;
   --font-body: 'Inter', sans-serif;
 }
 
 [data-theme="mizzy"] {
-  --bg-primary: #0d0015;
-  --bg-secondary: #1a0025;
-  --accent: #c084fc;
-  --accent-dark: #a855f7;
-  --glass-bg: rgba(192, 132, 252, 0.08);
-  --glass-border: rgba(192, 132, 252, 0.2);
-  --msg-user-bg: rgba(168, 85, 247, 0.12);
-  --msg-user-border: rgba(168, 85, 247, 0.25);
-  --msg-ai-bg: rgba(192, 132, 252, 0.05);
-  --msg-ai-border: rgba(192, 132, 252, 0.15);
-  --text-primary: #f3e8ff;
-  --text-secondary: #a78bfa;
+  --bg-primary: transparent;
+  --bg-secondary: rgba(20, 0, 40, 0.6);
+  --accent: #a855f7;
+  --accent-dark: #9333ea;
+  --glass-bg: rgba(20, 0, 40, 0.6);
+  --glass-border: #a855f7;
+  --msg-user-bg: rgba(168, 85, 247, 0.15);
+  --msg-user-border: #a855f7;
+  --msg-ai-bg: rgba(20, 0, 40, 0.4);
+  --msg-ai-border: rgba(168, 85, 247, 0.5);
+  --text-primary: #ffffff;
+  --text-secondary: #e9d5ff;
   --font-body: 'Inter', sans-serif;
 }
 
@@ -212,7 +212,7 @@ body {
 /* --- MIZZY THEME --- */
 [data-theme="mizzy"] body,
 [data-theme="mizzy"] {
-  background: #0d0015;
+  background: transparent;
 }
 
 [data-theme="mizzy"] .mizzy-bg {
@@ -220,45 +220,35 @@ body {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background:
-    linear-gradient(180deg, rgba(13, 0, 21, 0.8) 0%, rgba(26, 0, 37, 0.6) 50%, rgba(13, 0, 21, 0.9) 100%),
-    url('/mizzy_bg.png') center/cover no-repeat;
-}
-
-[data-theme="mizzy"] .chat-message-user {
-  background: rgba(168, 85, 247, 0.12);
-  border: 1px solid rgba(168, 85, 247, 0.25);
-  text-shadow: 0 0 8px rgba(168, 85, 247, 0.2);
-}
-
-[data-theme="mizzy"] .chat-message-ai {
-  background: rgba(192, 132, 252, 0.05);
-  border: 1px solid rgba(192, 132, 252, 0.15);
+  background: url('/mizzy_bg.png') center/cover no-repeat fixed;
+  /* Removed the gradient overlay so we see the picture clearly */
 }
 
 /* =============================
-   TERMINAL INTRO BANNER
+   TERMINAL BOUNCING AVATAR INTRO
    ============================= */
 
-.terminal-intro {
-  font-family: 'Fira Code', monospace;
-  font-size: 13px;
-  color: #5b9bd5;
-  white-space: pre;
-  line-height: 1.4;
-  padding: 20px;
-  text-align: center;
-  opacity: 0.8;
+@keyframes claudeBounce {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-8px);
+  }
 }
 
-.terminal-intro .box {
+.terminal-avatar-bounce {
+  animation: claudeBounce 2s ease-in-out infinite;
   display: inline-block;
-  text-align: left;
-  border: 1px solid rgba(91, 155, 213, 0.3);
-  padding: 12px 20px;
-  border-radius: 4px;
-  background: rgba(91, 155, 213, 0.04);
 }
+
+.terminal-avatar-blink {
+  animation: blink 4s infinite step-end;
+}
+
 
 /* =============================
    SCROLLBAR

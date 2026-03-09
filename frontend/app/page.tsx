@@ -209,8 +209,8 @@ export default function Home() {
     <main className="relative h-screen w-screen overflow-hidden" data-theme={theme}>
       {/* Mizzy Way background */}
       {theme === "mizzy" && <div className="mizzy-bg" />}
-      {/* Binary rain (hide on midnight for clean look, show tinted on mizzy) */}
-      {theme !== "midnight" && <BinaryRain />}
+      {/* Binary rain (blue on midnight, green on others, purple on mizzy) */}
+      <BinaryRain color={theme === "midnight" ? "blue" : theme === "mizzy" ? "purple" : "green"} />
       <div className="relative z-10 flex h-full">
         <Sidebar activeView={activeView} onViewChange={setActiveView} />
         <div className="flex-1 flex flex-col overflow-hidden relative">

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-export default function BinaryRain() {
+export default function BinaryRain({ color = "green" }: { color?: "green" | "blue" | "purple" }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -38,8 +38,11 @@ export default function BinaryRain() {
         const x = i * fontSize;
         const y = drops[i] * fontSize;
 
-        // Blue-green tint gradient based on position
-        const hue = 210 + Math.sin(i * 0.1) * 15; // oscillate in blue range
+        // Color based on prop
+        let hue = 120; // green default
+        if (color === "blue") hue = 210 + Math.sin(i * 0.1) * 15;
+        if (color === "purple") hue = 270 + Math.sin(i * 0.1) * 15;
+
         const alpha = Math.max(0, 1 - drops[i] / (canvas!.height / fontSize));
         ctx!.fillStyle = `hsla(${hue}, 80%, 60%, ${alpha * 0.4})`;
         ctx!.font = `${fontSize}px monospace`;
