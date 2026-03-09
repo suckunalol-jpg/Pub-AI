@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agents.orchestrator import orchestrator
 from api.auth import get_current_user_from_token
 from db.database import get_db
-from db.models import AgentSession, User
+from db.models import AgentSession, Conversation, User
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
@@ -47,11 +47,18 @@ async def spawn_agent(
     user: User = Depends(get_current_user_from_token),
     db: AsyncSession = Depends(get_db),
 ):
+    conv_id = req.conversation_id
+    if not conv_id:
+        conv = Conversation(user_id=user.id, title=f"Agent: {req.task[:50]}")
+        db.add(conv)
+        await db.flush()
+        conv_id = conv.id
+
     session = await orchestrator.spawn(
         db=db,
         agent_type=req.agent_type,
         task=req.task,
-        conversation_id=req.conversation_id or uuid.uuid4(),
+        conversation_id=conv_id,
         config=req.config or {},
         user_id=user.id,
     )
