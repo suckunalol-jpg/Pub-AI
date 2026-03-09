@@ -1,5 +1,6 @@
 """User Preferences API — theme, custom instructions, etc."""
 
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends
@@ -13,6 +14,22 @@ from db.models import User
 router = APIRouter(prefix="/api/preferences", tags=["preferences"])
 
 
+def _parse_prefs(raw) -> dict:
+    """Safely parse preferences_json which may be a JSON string, dict, or None."""
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return {}
+
+
 class PreferencesPayload(BaseModel):
     theme: Optional[str] = None  # default | terminal | midnight | mizzy
     custom_instructions: Optional[str] = None
@@ -20,7 +37,7 @@ class PreferencesPayload(BaseModel):
 
 @router.get("")
 async def get_preferences(user: User = Depends(get_current_user_from_token)):
-    prefs = user.preferences_json or {}
+    prefs = _parse_prefs(user.preferences_json)
     return {
         "theme": prefs.get("theme", "default"),
         "custom_instructions": prefs.get("custom_instructions", ""),
@@ -33,7 +50,7 @@ async def save_preferences(
     user: User = Depends(get_current_user_from_token),
     db: AsyncSession = Depends(get_db),
 ):
-    prefs = dict(user.preferences_json or {})
+    prefs = _parse_prefs(user.preferences_json)
     if payload.theme is not None:
         prefs["theme"] = payload.theme
     if payload.custom_instructions is not None:
@@ -44,3 +61,4 @@ async def save_preferences(
     flag_modified(user, "preferences_json")
     await db.flush()
     return {"detail": "Preferences saved", **prefs}
+
