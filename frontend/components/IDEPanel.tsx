@@ -470,7 +470,7 @@ export default function IDEPanel() {
             const fullMsg = context + msg;
 
             // Simple non-streaming request
-            const response = await api.sendMessage(fullMsg);
+            const response = await api.sendMessage(null, fullMsg);
             setAiMessages((prev) => [...prev, { role: "assistant", content: response.content }]);
         } catch {
             setAiMessages((prev) => [...prev, { role: "assistant", content: "Sorry, couldn't get a response." }]);
