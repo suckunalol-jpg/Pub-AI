@@ -1,7 +1,9 @@
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from config import settings
 
@@ -182,6 +184,8 @@ from api.models import router as models_router
 from api.mcp import router as mcp_router
 from api.team_templates import router as team_templates_router
 from api.preferences import router as preferences_router
+from api.commands import router as commands_router
+from api.uploads import router as uploads_router
 
 app.include_router(auth_router)
 app.include_router(chat_router)
@@ -197,6 +201,13 @@ app.include_router(models_router)
 app.include_router(mcp_router)
 app.include_router(team_templates_router)
 app.include_router(preferences_router)
+app.include_router(commands_router)
+app.include_router(uploads_router)
+
+# Serve uploaded files as static assets
+_uploads_dir = Path(__file__).resolve().parent / "uploads"
+_uploads_dir.mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(_uploads_dir)), name="uploads")
 
 
 @app.get("/health")

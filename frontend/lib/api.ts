@@ -46,7 +46,13 @@ export function login(username: string, password: string) {
 
 // Chat — SSE streaming types and function
 
-export type StreamPhase = "thinking" | "coding" | "executing" | "searching" | "reviewing";
+export type StreamPhase =
+  | "thinking" | "analyzing" | "planning" | "writing"
+  | "coding" | "debugging" | "executing"
+  | "reading_file" | "writing_file"
+  | "searching_web" | "searching_knowledge"
+  | "spawning_agent" | "calling_tool"
+  | "reviewing" | "summarizing" | "formatting";
 
 export interface StreamEvent {
   type: "status" | "token" | "code" | "done" | "error";
@@ -443,4 +449,44 @@ export function savePreferences(prefs: { theme?: string; custom_instructions?: s
     "/api/preferences",
     { method: "PUT", body: prefs }
   );
+}
+
+// Slash Commands
+export interface SlashCommand {
+  name: string;
+  description: string;
+  usage: string;
+  type: "local" | "server";
+}
+
+export function getSlashCommands() {
+  return request<SlashCommand[]>("/api/chat/commands");
+}
+
+// File Uploads
+export interface UploadResult {
+  id: string;
+  filename: string;
+  url: string;
+  content_type: string;
+  size: number;
+}
+
+export async function uploadFile(file: File): Promise<UploadResult> {
+  const token = localStorage.getItem("token");
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_BASE}/api/chat/upload`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Upload failed" }));
+    throw new Error(err.detail || "Upload failed");
+  }
+
+  return res.json();
 }

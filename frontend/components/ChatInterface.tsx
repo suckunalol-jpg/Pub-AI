@@ -12,11 +12,22 @@ import { useThemeStore } from "@/lib/themeStore";
 
 // Phase-to-summary mapping for action entries
 const phaseSummaries: Record<AiPhase, string> = {
-  thinking: "Analyzing your request...",
+  thinking: "Thinking...",
+  analyzing: "Analyzing your request...",
+  planning: "Planning approach...",
+  writing: "Writing response...",
   coding: "Writing code...",
+  debugging: "Debugging...",
   executing: "Running code...",
-  searching: "Searching knowledge base...",
+  reading_file: "Reading file...",
+  writing_file: "Writing file...",
+  searching_web: "Searching the web...",
+  searching_knowledge: "Searching knowledge base...",
+  spawning_agent: "Spawning sub-agent...",
+  calling_tool: "Calling tool...",
   reviewing: "Reviewing output...",
+  summarizing: "Summarizing...",
+  formatting: "Formatting response...",
 };
 
 // Memoize ChatMessage for the messages list
@@ -34,6 +45,7 @@ export default function ChatInterface() {
   const [liveCode, setLiveCode] = useState("");
   const [actions, setActions] = useState<ActionEntry[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+  const sendRef = useRef<(text: string) => void>(() => { });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -53,7 +65,7 @@ export default function ChatInterface() {
     };
   }, []);
 
-  const handleNewChat = () => {
+  const handleNewChat = useCallback(() => {
     abortRef.current?.abort();
     setMessages([]);
     setConversationId(null);
@@ -61,7 +73,76 @@ export default function ChatInterface() {
     setStreamingContent("");
     setLiveCode("");
     setActions([]);
-  };
+  }, []);
+
+  const handleSlashCommand = useCallback(
+    (command: string, args: string) => {
+      const setTheme = useThemeStore.getState().setTheme;
+
+      switch (command) {
+        case "clear":
+          setMessages([]);
+          setStreamingContent("");
+          setActions([]);
+          break;
+        case "new":
+          handleNewChat();
+          break;
+        case "theme": {
+          const t = args.trim().toLowerCase();
+          if (["default", "terminal", "midnight", "mizzy"].includes(t)) {
+            setTheme(t as "default" | "terminal" | "midnight" | "mizzy");
+          } else {
+            const infoMsg: Message = {
+              id: generateId(),
+              role: "assistant",
+              content: `Available themes: **default**, **terminal**, **midnight**, **mizzy**.\nUsage: \`/theme terminal\``,
+              timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, infoMsg]);
+          }
+          break;
+        }
+        case "help": {
+          const helpMsg: Message = {
+            id: generateId(),
+            role: "assistant",
+            content: [
+              "## Available Commands",
+              "",
+              "| Command | Description |",
+              "|---------|-------------|",
+              "| `/clear` | Clear the current chat |",
+              "| `/new` | Start a new conversation |",
+              "| `/theme <name>` | Switch theme |",
+              "| `/help` | Show this help |",
+              "| `/export` | Export chat as markdown |",
+            ].join("\n"),
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, helpMsg]);
+          break;
+        }
+        case "export": {
+          const md = messages
+            .map((m) => `**${m.role === "user" ? "You" : "AI"}**: ${m.content}`)
+            .join("\n\n---\n\n");
+          const blob = new Blob([md], { type: "text/markdown" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `chat-export-${Date.now()}.md`;
+          a.click();
+          URL.revokeObjectURL(url);
+          break;
+        }
+        default:
+          // Unknown command — send it as a normal message to the AI
+          sendRef.current(`/${command} ${args}`.trim());
+      }
+    },
+    [handleNewChat, messages]
+  );
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
@@ -206,6 +287,8 @@ export default function ChatInterface() {
     [isLoading, conversationId]
   );
 
+  // Keep sendRef in sync with handleSend for slash command forwarding
+  sendRef.current = handleSend;
   const handleFeedback = async (messageId: string, rating: 1 | 2) => {
     try {
       await api.sendFeedback(messageId, rating);
@@ -285,7 +368,7 @@ export default function ChatInterface() {
       </div>
 
       {/* Input bar -- extracted component to prevent re-renders on typing */}
-      <ChatInputBar onSend={handleSend} onStop={handleStop} isLoading={isLoading} />
+      <ChatInputBar onSend={handleSend} onStop={handleStop} onSlashCommand={handleSlashCommand} isLoading={isLoading} />
     </div>
   );
 }
