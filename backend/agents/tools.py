@@ -78,17 +78,40 @@ def list_tools() -> List[Dict[str, Any]]:
 
 def tools_prompt() -> str:
     """Build a text description of all available tools for the system prompt."""
-    lines = ["Available tools:\n"]
+    lines = ["\n## Available Tools\n"]
     for t in _TOOLS.values():
-        params = ", ".join(f"{k}: {v}" for k, v in t.parameters.items())
-        lines.append(f"- **{t.name}**({params}): {t.description}")
+        params = ", ".join(f'"{k}": "{v}"' for k, v in t.parameters.items())
+        lines.append(f"### {t.name}")
+        lines.append(f"{t.description}")
+        lines.append(f"Parameters: {{{params}}}")
+        lines.append("")
+    lines.append("## How to Use Tools")
     lines.append("")
-    lines.append(
-        "To use a tool, respond with a JSON block:\n"
-        '```tool\n{"tool": "<name>", "params": {<params>}}\n```\n'
-        "To finish your task, respond with:\n"
-        '```result\n{"status": "done", "output": "<your final answer>"}\n```'
-    )
+    lines.append("When you want to use a tool, output EXACTLY this format (the ```tool and ``` markers are required):")
+    lines.append("")
+    lines.append('```tool')
+    lines.append('{"tool": "tool_name_here", "params": {"param1": "value1"}}')
+    lines.append('```')
+    lines.append("")
+    lines.append("Example — searching the web:")
+    lines.append("")
+    lines.append('```tool')
+    lines.append('{"tool": "web_search", "params": {"query": "python async tutorial"}}')
+    lines.append('```')
+    lines.append("")
+    lines.append("Example — executing code:")
+    lines.append("")
+    lines.append('```tool')
+    lines.append('{"tool": "execute_code", "params": {"language": "python", "code": "print(2+2)"}}')
+    lines.append('```')
+    lines.append("")
+    lines.append("You can call multiple tools in one response by including multiple ```tool blocks.")
+    lines.append("")
+    lines.append("When your task is COMPLETE, output EXACTLY:")
+    lines.append("")
+    lines.append('```result')
+    lines.append('{"status": "done", "output": "Your final answer here"}')
+    lines.append('```')
     return "\n".join(lines)
 
 

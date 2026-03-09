@@ -201,14 +201,14 @@ export function sendFeedback(messageId: string, rating: 1 | 2) {
 
 // Agents
 export function spawnAgent(agentType: string, task: string) {
-  return request<{ id: string; status: string }>("/api/agents/spawn", {
+  return request<{ id: string; agent_type: string; agent_name: string; status: string }>("/api/agents/spawn", {
     method: "POST",
     body: { agent_type: agentType, task },
   });
 }
 
 export function getAgentStatus(id: string) {
-  return request<{ id: string; status: string; result?: unknown }>(`/api/agents/${id}`);
+  return request<{ id: string; status: string; result?: Record<string, any> }>(`/api/agents/${id}`);
 }
 
 export function messageAgent(id: string, message: string) {
