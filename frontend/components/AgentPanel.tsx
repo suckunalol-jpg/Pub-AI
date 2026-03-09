@@ -87,12 +87,12 @@ export default function AgentPanel() {
             prev.map((a) =>
               a.id === agent.id
                 ? {
-                    ...a,
-                    status: status.status as Agent["status"],
-                    result: status.result?.content || status.result?.error,
-                    iterations: status.result?.iterations,
-                    toolsUsed: status.result?.tools_used,
-                  }
+                  ...a,
+                  status: status.status as Agent["status"],
+                  result: (status.result?.content || status.result?.error) as string | undefined,
+                  iterations: status.result?.iterations as number | undefined,
+                  toolsUsed: status.result?.tools_used as number | undefined,
+                }
                 : a
             )
           );
@@ -347,8 +347,8 @@ export default function AgentPanel() {
                           {statusIcon(agent.status)}
                           <span className={cn(
                             agent.status === "running" ? "text-green-400" :
-                            agent.status === "completed" ? "text-blue-400" :
-                            "text-gray-400"
+                              agent.status === "completed" ? "text-blue-400" :
+                                "text-gray-400"
                           )}>{agent.status}</span>
                         </span>
                         {agent.iterations && (
