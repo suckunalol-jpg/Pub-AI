@@ -7,45 +7,50 @@ from config import settings
 
 
 async def _seed_default_model():
-    """If no models are registered yet, create one from env vars so the system works out of the box."""
+    """Ensure the default 'pub-ai' model matches env vars. Creates or updates as needed."""
     from db.database import async_session
     from db.models import RegisteredModel
-    from sqlalchemy import select, func
+    from sqlalchemy import select
+
+    if not settings.HF_INFERENCE_URL and not settings.OLLAMA_HOST:
+        print("[Pub AI] WARNING: No model configured! Set HF_INFERENCE_URL or OLLAMA_HOST, or register via /api/models")
+        return
+
+    if settings.HF_INFERENCE_URL:
+        provider_type = "huggingface"
+        endpoint_url = settings.HF_INFERENCE_URL
+        api_token = settings.HF_API_TOKEN or None
+    else:
+        provider_type = "ollama"
+        endpoint_url = settings.OLLAMA_HOST
+        api_token = None
 
     async with async_session() as session:
-        count_result = await session.execute(select(func.count()).select_from(RegisteredModel))
-        count = count_result.scalar()
-        if count and count > 0:
-            return  # models already exist
+        result = await session.execute(
+            select(RegisteredModel).where(RegisteredModel.name == "pub-ai")
+        )
+        model = result.scalar_one_or_none()
 
-        if settings.HF_INFERENCE_URL:
-            model = RegisteredModel(
-                name="pub-ai",
-                provider_type="huggingface",
-                endpoint_url=settings.HF_INFERENCE_URL,
-                api_token=settings.HF_API_TOKEN or None,
-                model_identifier="pub-ai",
-                is_active=True,
-                config={},
-            )
-            session.add(model)
-            await session.commit()
-            print("[Pub AI] Seeded default model: HuggingFace @ %s" % settings.HF_INFERENCE_URL)
-        elif settings.OLLAMA_HOST:
-            model = RegisteredModel(
-                name="pub-ai",
-                provider_type="ollama",
-                endpoint_url=settings.OLLAMA_HOST,
-                api_token=None,
-                model_identifier="pub-ai",
-                is_active=True,
-                config={},
-            )
-            session.add(model)
-            await session.commit()
-            print("[Pub AI] Seeded default model: Ollama @ %s" % settings.OLLAMA_HOST)
+        if model:
+            model.provider_type = provider_type
+            model.endpoint_url = endpoint_url
+            model.api_token = api_token
+            model.is_active = True
+            print("[Pub AI] Updated default model: %s @ %s" % (provider_type, endpoint_url))
         else:
-            print("[Pub AI] WARNING: No model configured! Set HF_INFERENCE_URL or OLLAMA_HOST, or register via /api/models")
+            model = RegisteredModel(
+                name="pub-ai",
+                provider_type=provider_type,
+                endpoint_url=endpoint_url,
+                api_token=api_token,
+                model_identifier="pub-ai",
+                is_active=True,
+                config={},
+            )
+            session.add(model)
+            print("[Pub AI] Seeded default model: %s @ %s" % (provider_type, endpoint_url))
+
+        await session.commit()
 
 
 @asynccontextmanager
