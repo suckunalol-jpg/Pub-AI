@@ -513,3 +513,94 @@ export function spawnAgent(agentType: string, task: string, conversationId?: str
 export function stopAgent(agentId: string) {
   return request(`/api/agents/${agentId}`, { method: "DELETE" });
 }
+
+// ---------- IDE API ----------
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  type: "file" | "directory";
+  size: number;
+  extension: string;
+}
+
+export interface FileContent {
+  path: string;
+  content: string;
+  language: string;
+}
+
+export function ideListFiles(path = "") {
+  return request<FileEntry[]>(`/api/ide/files?path=${encodeURIComponent(path)}`);
+}
+
+export function ideReadFile(path: string) {
+  return request<FileContent>(`/api/ide/file?path=${encodeURIComponent(path)}`);
+}
+
+export function ideSaveFile(path: string, content: string) {
+  return request<{ detail: string }>("/api/ide/file", {
+    method: "POST",
+    body: JSON.stringify({ path, content }),
+  });
+}
+
+export function ideDeleteFile(path: string) {
+  return request<{ detail: string }>(`/api/ide/file?path=${encodeURIComponent(path)}`, {
+    method: "DELETE",
+  });
+}
+
+export function ideRenameFile(oldPath: string, newPath: string) {
+  return request<{ detail: string }>("/api/ide/rename", {
+    method: "POST",
+    body: JSON.stringify({ old_path: oldPath, new_path: newPath }),
+  });
+}
+
+export function ideCreateFolder(path: string) {
+  return request<{ detail: string }>("/api/ide/folder", {
+    method: "POST",
+    body: JSON.stringify({ path }),
+  });
+}
+
+export function ideGitClone(url: string, folder?: string) {
+  return request<{ detail: string; folder: string }>("/api/ide/git/clone", {
+    method: "POST",
+    body: JSON.stringify({ url, folder }),
+  });
+}
+
+export function ideGitStatus(path = "") {
+  return request<{ branch: string; changes: string[]; is_repo: boolean }>(
+    `/api/ide/git/status?path=${encodeURIComponent(path)}`
+  );
+}
+
+export function ideGitLog(path = "") {
+  return request<{ commits: { hash: string; message: string }[] }>(
+    `/api/ide/git/log?path=${encodeURIComponent(path)}`
+  );
+}
+
+export function ideGitCommit(message: string, path = "") {
+  return request<{ output: string; exit_code: number }>(
+    `/api/ide/git/commit?path=${encodeURIComponent(path)}`,
+    { method: "POST", body: JSON.stringify({ message }) }
+  );
+}
+
+export function ideGitPush(path = "") {
+  return request<{ output: string; exit_code: number }>(
+    `/api/ide/git/push?path=${encodeURIComponent(path)}`,
+    { method: "POST" }
+  );
+}
+
+export function ideShell(command: string, cwd?: string) {
+  return request<{ output: string; exit_code: number }>("/api/ide/shell", {
+    method: "POST",
+    body: JSON.stringify({ command, cwd }),
+  });
+}

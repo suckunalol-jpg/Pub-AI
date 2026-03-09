@@ -8,6 +8,7 @@ import ChatInterface from "@/components/ChatInterface";
 import AgentPanel from "@/components/AgentPanel";
 import AgentTabBar from "@/components/AgentTabBar";
 import AgentChatTab from "@/components/AgentChatTab";
+import IDEPanel from "@/components/IDEPanel";
 import WorkflowBuilder from "@/components/WorkflowBuilder";
 import KnowledgeUpload from "@/components/KnowledgeUpload";
 import TrainingPanel from "@/components/TrainingPanel";
@@ -19,7 +20,7 @@ import * as api from "@/lib/api";
 import { useThemeStore } from "@/lib/themeStore";
 import { useAgentTabStore } from "@/lib/agentTabStore";
 
-export type ActiveView = "chat" | "agents" | "workflows" | "knowledge" | "training" | "roblox" | "settings";
+export type ActiveView = "chat" | "agents" | "ide" | "workflows" | "knowledge" | "training" | "roblox" | "settings";
 
 function LoginScreen({ onLogin }: { onLogin: (username: string) => void }) {
   const [isRegister, setIsRegister] = useState(false);
@@ -189,6 +190,8 @@ export default function Home() {
       }
       case "agents":
         return <AgentPanel />;
+      case "ide":
+        return <IDEPanel />;
       case "workflows":
         return <WorkflowBuilder />;
       case "knowledge":

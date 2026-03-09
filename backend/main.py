@@ -186,6 +186,7 @@ from api.team_templates import router as team_templates_router
 from api.preferences import router as preferences_router
 from api.commands import router as commands_router
 from api.uploads import router as uploads_router
+from api.ide import router as ide_router
 
 app.include_router(auth_router)
 app.include_router(chat_router)
@@ -203,6 +204,7 @@ app.include_router(team_templates_router)
 app.include_router(preferences_router)
 app.include_router(commands_router)
 app.include_router(uploads_router)
+app.include_router(ide_router)
 
 # Serve uploaded files as static assets
 _uploads_dir = Path(__file__).resolve().parent / "uploads"

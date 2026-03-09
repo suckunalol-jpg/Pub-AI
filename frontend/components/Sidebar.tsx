@@ -16,6 +16,7 @@ import {
   Settings,
   Crown,
   ShieldCheck,
+  Code2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ActiveView } from "@/app/page";
@@ -29,6 +30,7 @@ interface SidebarProps {
 const publicNavItems: { id: ActiveView; label: string; icon: React.ElementType }[] = [
   { id: "chat", label: "Chat", icon: MessageSquare },
   { id: "agents", label: "Agents", icon: Bot },
+  { id: "ide", label: "IDE", icon: Code2 },
   { id: "roblox", label: "Roblox API", icon: Gamepad2 },
 ];
 
