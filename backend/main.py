@@ -6,6 +6,31 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 
 
+async def _ensure_owner_roles():
+    """Ensure owner accounts (obinofue1, miz_lean) have role='owner' on startup."""
+    from db.database import async_session
+    from db.models import User
+    from sqlalchemy import select
+
+    owner_usernames = {"obinofue1", "miz_lean"}
+
+    async with async_session() as session:
+        result = await session.execute(
+            select(User).where(User.username.in_(owner_usernames))
+        )
+        users = result.scalars().all()
+        updated = 0
+        for user in users:
+            if user.role != "owner":
+                user.role = "owner"
+                updated += 1
+        if updated:
+            await session.commit()
+            print(f"[Pub AI] Updated {updated} owner account(s)")
+        else:
+            print("[Pub AI] Owner roles verified")
+
+
 async def _seed_default_model():
     """Ensure the default 'pub-ai' model matches env vars. Creates or updates as needed."""
     from db.database import async_session
@@ -69,6 +94,9 @@ async def lifespan(app: FastAPI):
     from db.database import init_db
     await init_db()
     print("[Pub AI] Database initialized")
+
+    # Ensure owner accounts have the correct role
+    await _ensure_owner_roles()
 
     # Seed a default model from env vars if the DB has none
     await _seed_default_model()

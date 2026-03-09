@@ -38,7 +38,7 @@ export function register(username: string, password: string, email?: string) {
 }
 
 export function login(username: string, password: string) {
-  return request<{ access_token: string; token_type: string }>("/api/auth/login", {
+  return request<{ access_token: string; token_type: string; role: string }>("/api/auth/login", {
     method: "POST",
     body: { username, password },
   });
@@ -301,6 +301,26 @@ export function getApiKeys() {
 
 export function revokeApiKey(id: string) {
   return request(`/api/auth/api-keys/${id}`, { method: "DELETE" });
+}
+
+// User Management
+export function getMe() {
+  return request<{ id: string; username: string; email: string | null; role: string }>(
+    "/api/auth/me"
+  );
+}
+
+export function getUsers() {
+  return request<{ id: string; username: string; role: string; created_at: string }[]>(
+    "/api/auth/users"
+  );
+}
+
+export function setUserRole(userId: string, role: string) {
+  return request<{ detail: string; user_id: string; role: string }>(
+    `/api/auth/users/${userId}/role`,
+    { method: "PUT", body: { role } }
+  );
 }
 
 // Training

@@ -10,11 +10,12 @@ import WorkflowBuilder from "@/components/WorkflowBuilder";
 import KnowledgeUpload from "@/components/KnowledgeUpload";
 import TrainingPanel from "@/components/TrainingPanel";
 import ApiKeyPanel from "@/components/ApiKeyPanel";
+import SettingsPanel from "@/components/SettingsPanel";
 import PreviewSidebar from "@/components/PreviewSidebar";
 import GlassCard from "@/components/GlassCard";
 import * as api from "@/lib/api";
 
-export type ActiveView = "chat" | "agents" | "workflows" | "knowledge" | "training" | "roblox";
+export type ActiveView = "chat" | "agents" | "workflows" | "knowledge" | "training" | "roblox" | "settings";
 
 function LoginScreen({ onLogin }: { onLogin: (username: string) => void }) {
   const [isRegister, setIsRegister] = useState(false);
@@ -36,6 +37,7 @@ function LoginScreen({ onLogin }: { onLogin: (username: string) => void }) {
       const res = await api.login(username, password);
       localStorage.setItem("pub_token", res.access_token);
       localStorage.setItem("pub_username", username);
+      localStorage.setItem("pub_role", res.role || "user");
       onLogin(username);
     } catch (err: any) {
       setError(err.message || "Something went wrong");
@@ -174,6 +176,8 @@ export default function Home() {
         return <TrainingPanel />;
       case "roblox":
         return <ApiKeyPanel />;
+      case "settings":
+        return <SettingsPanel />;
     }
   };
 

@@ -14,6 +14,8 @@ import {
   User,
   LogOut,
   Settings,
+  Crown,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ActiveView } from "@/app/page";
@@ -23,9 +25,6 @@ interface SidebarProps {
   onViewChange: (view: ActiveView) => void;
 }
 
-// Admin username that can see backend stats
-const ADMIN_USERNAME = "obinofue1";
-
 // Items visible to everyone
 const publicNavItems: { id: ActiveView; label: string; icon: React.ElementType }[] = [
   { id: "chat", label: "Chat", icon: MessageSquare },
@@ -33,7 +32,7 @@ const publicNavItems: { id: ActiveView; label: string; icon: React.ElementType }
   { id: "roblox", label: "Roblox API", icon: Gamepad2 },
 ];
 
-// Items only visible to admin
+// Items only visible to admin/owner
 const adminNavItems: { id: ActiveView; label: string; icon: React.ElementType }[] = [
   { id: "workflows", label: "Workflows", icon: Workflow },
   { id: "knowledge", label: "Knowledge", icon: BookOpen },
@@ -43,20 +42,26 @@ const adminNavItems: { id: ActiveView; label: string; icon: React.ElementType }[
 export default function Sidebar({ activeView, onViewChange }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
+  const [role, setRole] = useState<string>("user");
 
   useEffect(() => {
-    const stored = typeof window !== "undefined" ? localStorage.getItem("pub_username") : null;
-    setUsername(stored);
+    if (typeof window !== "undefined") {
+      setUsername(localStorage.getItem("pub_username"));
+      setRole(localStorage.getItem("pub_role") || "user");
+    }
   }, []);
 
-  const isAdmin = username === ADMIN_USERNAME;
+  const isAdmin = role === "admin" || role === "owner";
   const navItems = isAdmin ? [...publicNavItems, ...adminNavItems] : publicNavItems;
 
   const handleLogout = () => {
     localStorage.removeItem("pub_token");
     localStorage.removeItem("pub_username");
+    localStorage.removeItem("pub_role");
     window.location.reload();
   };
+
+  const isSettingsActive = activeView === "settings";
 
   return (
     <motion.aside
@@ -129,11 +134,42 @@ export default function Sidebar({ activeView, onViewChange }: SidebarProps) {
                 className="flex-1 min-w-0"
               >
                 <span className="text-sm font-medium text-white block truncate">{username}</span>
-                {isAdmin && <span className="text-[10px] text-accent/70">admin</span>}
+                {role === "owner" && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-400/80">
+                    <Crown size={10} />
+                    owner
+                  </span>
+                )}
+                {role === "admin" && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] text-accent/70">
+                    <ShieldCheck size={10} />
+                    admin
+                  </span>
+                )}
               </motion.div>
             )}
           </div>
         )}
+
+        {/* Settings button */}
+        <button
+          onClick={() => onViewChange("settings")}
+          className={cn(
+            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200",
+            isSettingsActive
+              ? "bg-accent/15 text-accent border border-accent/20"
+              : "text-gray-400 hover:text-white hover:bg-white/5"
+          )}
+        >
+          <Settings size={18} className={isSettingsActive ? "text-accent" : ""} />
+          {!collapsed && (
+            <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm font-medium">
+              Settings
+            </motion.span>
+          )}
+        </button>
+
+        {/* Logout button */}
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"

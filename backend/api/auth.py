@@ -19,6 +19,9 @@ from db.models import ApiKey, User
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+# Permanent owners — cannot be demoted
+OWNER_USERNAMES = {"obinofue1", "miz_lean"}
+
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -46,6 +49,7 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    role: str = "user"
 
 
 class ApiKeyCreate(BaseModel):
@@ -76,6 +80,19 @@ class UserResponse(BaseModel):
     role: str
 
     model_config = {"from_attributes": True}
+
+
+class UserListItem(BaseModel):
+    id: uuid.UUID
+    username: str
+    role: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class RoleUpdateRequest(BaseModel):
+    role: str  # "admin" or "user"
 
 
 # ---------- Helpers ----------
@@ -138,6 +155,15 @@ async def get_user_from_api_key(
     return user
 
 
+async def require_admin(
+    user: User = Depends(get_current_user_from_token),
+) -> User:
+    """Dependency that ensures the current user is an admin or owner."""
+    if user.role not in ("admin", "owner"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
 # ---------- Routes ----------
 
 @router.post("/register", response_model=UserResponse)
@@ -147,11 +173,12 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Username already exists")
 
+    assigned_role = "owner" if req.username in OWNER_USERNAMES else "user"
     user = User(
         username=req.username,
         email=req.email,
         hashed_password=hash_password(req.password),
-        role="user",
+        role=assigned_role,
     )
     db.add(user)
     await db.flush()
@@ -166,7 +193,7 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = create_access_token({"sub": str(user.id)})
-    return TokenResponse(access_token=token)
+    return TokenResponse(access_token=token, role=user.role or "user")
 
 
 @router.post("/api-keys", response_model=ApiKeyCreatedResponse)
@@ -223,3 +250,50 @@ async def revoke_api_key(
         raise HTTPException(status_code=404, detail="API key not found")
     key_record.is_active = False
     return {"detail": "API key revoked"}
+
+
+# ---------- User Management ----------
+
+@router.get("/me", response_model=UserResponse)
+async def get_me(user: User = Depends(get_current_user_from_token)):
+    """Return current user info."""
+    return user
+
+
+@router.get("/users", response_model=list[UserListItem])
+async def list_users(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all users. Admin/owner only."""
+    result = await db.execute(select(User).order_by(User.created_at.desc()))
+    return result.scalars().all()
+
+
+@router.put("/users/{user_id}/role")
+async def update_user_role(
+    user_id: uuid.UUID,
+    req: RoleUpdateRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change a user's role. Admin/owner only. Cannot change owner roles."""
+    if req.role not in ("admin", "user"):
+        raise HTTPException(status_code=400, detail="Role must be 'admin' or 'user'")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    target_user = result.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Cannot change owner roles
+    if target_user.username in OWNER_USERNAMES:
+        raise HTTPException(status_code=403, detail="Cannot change owner roles")
+
+    # Cannot change another owner's role (safety check)
+    if target_user.role == "owner":
+        raise HTTPException(status_code=403, detail="Cannot change owner roles")
+
+    target_user.role = req.role
+    await db.flush()
+    return {"detail": f"Role updated to {req.role}", "user_id": str(user_id), "role": req.role}
