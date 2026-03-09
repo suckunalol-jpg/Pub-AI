@@ -20,10 +20,15 @@ async def _seed_default_model():
         provider_type = "huggingface"
         endpoint_url = settings.HF_INFERENCE_URL
         api_token = settings.HF_API_TOKEN or None
-    else:
+        model_id = settings.MODEL_IDENTIFIER or "pub-ai"
+    elif settings.OLLAMA_HOST:
         provider_type = "ollama"
         endpoint_url = settings.OLLAMA_HOST
         api_token = None
+        model_id = settings.MODEL_IDENTIFIER or "pub-ai"
+    else:
+        print("[Pub AI] WARNING: No model configured! Set HF_INFERENCE_URL or OLLAMA_HOST")
+        return
 
     async with async_session() as session:
         result = await session.execute(
@@ -35,22 +40,27 @@ async def _seed_default_model():
             model.provider_type = provider_type
             model.endpoint_url = endpoint_url
             model.api_token = api_token
+            model.model_identifier = model_id
             model.is_active = True
-            print("[Pub AI] Updated default model: %s @ %s" % (provider_type, endpoint_url))
+            print("[Pub AI] Updated default model: %s @ %s (model: %s)" % (provider_type, endpoint_url, model_id))
         else:
             model = RegisteredModel(
                 name="pub-ai",
                 provider_type=provider_type,
                 endpoint_url=endpoint_url,
                 api_token=api_token,
-                model_identifier="pub-ai",
+                model_identifier=model_id,
                 is_active=True,
                 config={},
             )
             session.add(model)
-            print("[Pub AI] Seeded default model: %s @ %s" % (provider_type, endpoint_url))
+            print("[Pub AI] Seeded default model: %s @ %s (model: %s)" % (provider_type, endpoint_url, model_id))
 
         await session.commit()
+
+    # Invalidate provider cache so it picks up the new model
+    from ai.provider import ai_provider
+    ai_provider.invalidate_cache()
 
 
 @asynccontextmanager

@@ -14,7 +14,10 @@ class Settings(BaseSettings):
     HF_API_TOKEN: str = ""
 
     # Pub AI Model — Ollama (local dev)
-    OLLAMA_HOST: str = "http://localhost:11434"
+    OLLAMA_HOST: str = ""
+
+    # Model identifier (e.g. llama-3.3-70b-versatile for Groq)
+    MODEL_IDENTIFIER: str = ""
 
     # Auth
     SECRET_KEY: str = "CHANGE-ME-IN-PRODUCTION"
