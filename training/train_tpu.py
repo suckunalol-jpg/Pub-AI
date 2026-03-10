@@ -86,45 +86,9 @@ log = logging.getLogger("pub-ai-tpu")
 
 DATASETS: List[Dict] = [
     # --- Coding instruction datasets ---
-    {"name": "TokenBender/code_instructions_122k_alpaca_style", "split": "train"},
+    {"name": "TokenBender/code_instructions_122k_alpaca_style", "split": "train", "sample": 20_000},
     {"name": "iamtarun/python_code_instructions_18k_alpaca", "split": "train"},
-    {"name": "Vezora/Tested-143k-Python-Alpaca", "split": "train"},
-    {"name": "nickrosh/Evol-Instruct-Code-80k-v1", "split": "train"},
-
-    # --- General reasoning + instruction following ---
-    {"name": "Open-Orca/OpenOrca", "split": "train", "sample": 50_000},
-    {"name": "teknium/OpenHermes-2.5", "split": "train", "sample": 50_000, "optional": True},
-
-    # --- Tool use + agentic ---
-    {"name": "glaiveai/glaive-function-calling-v2", "split": "train"},
-    {"name": "Salesforce/xlam-function-calling-60k", "split": "train"},
-    {"name": "NousResearch/hermes-function-calling-v1", "split": "train", "sample": 30_000},
-
-    # --- Code-specific quality ---
-    {"name": "bigcode/self-oss-instruct-sc2-exec-filter-50k", "split": "train"},
-    {"name": "codeparrot/self-instruct-starcoder", "split": "train"},
-
-    # --- Multi-turn chat ---
-    {"name": "HuggingFaceH4/ultrachat_200k", "split": "train_sft", "sample": 40_000},
-
-    # --- Roblox / Luau specific ---
-    {"name": "Roblox/luau-corpus", "split": "train", "sample": 20_000, "optional": True},
-
-    # --- DPO / preference (optional, for RLHF stage) ---
-    {"name": "argilla/dpo-mix-7k", "split": "train", "sample": 7_000, "optional": True},
-
-    # --- Math + reasoning ---
-    {"name": "microsoft/orca-math-word-problems-200k", "split": "train", "sample": 30_000},
-    {"name": "camel-ai/math", "split": "train", "sample": 20_000, "optional": True},
-
-    # --- Security + vulnerability ---
-    {"name": "CyberNative/Code_Vulnerability_Security_DPO", "split": "train", "sample": 10_000, "optional": True},
-
-    # --- Agent trajectories ---
-    {"name": "xlangai/xlang-agent-trajectories", "split": "train", "sample": 15_000, "optional": True},
-
-    # --- Debugging ---
-    {"name": "sayhan/stx-code-debug", "split": "train", "sample": 15_000, "optional": True},
+    {"name": "nickrosh/Evol-Instruct-Code-80k-v1", "split": "train", "sample": 20_000},
 ]
 
 
