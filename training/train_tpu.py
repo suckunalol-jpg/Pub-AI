@@ -93,7 +93,7 @@ DATASETS: List[Dict] = [
 
     # --- General reasoning + instruction following ---
     {"name": "Open-Orca/OpenOrca", "split": "train", "sample": 50_000},
-    {"name": "teknium/OpenHermes-2.5", "split": "train", "sample": 50_000},
+    {"name": "teknium/OpenHermes-2.5", "split": "train", "sample": 50_000, "optional": True},
 
     # --- Tool use + agentic ---
     {"name": "glaiveai/glaive-function-calling-v2", "split": "train"},
