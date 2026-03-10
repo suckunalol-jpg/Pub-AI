@@ -115,6 +115,10 @@ gcloud compute tpus tpu-vm ssh "$TPU_NAME" \
     --command="$(cat <<'SETUP_EOF'
 set -euo pipefail
 
+echo "=== Cleaning up old processes ==="
+sudo pkill -9 -f python3 || true
+sudo fuser -k -9 /dev/vfio/* || true
+
 echo "=== Installing system dependencies ==="
 sudo apt-get update -qq
 sudo apt-get install -y -qq git python3-pip python3-venv
