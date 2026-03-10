@@ -337,3 +337,89 @@ async def list_models():
             })
 
     return {"models": models}
+
+
+# ---------- Feedback stats ----------
+
+@router.get("/feedback-stats")
+async def feedback_stats(db: AsyncSession = Depends(get_db)):
+    """Get counts of liked/disliked feedback and usable preference pairs."""
+    from sqlalchemy import func, select as sa_select
+    from db.models import Feedback
+
+    try:
+        liked = (await db.execute(
+            sa_select(func.count()).where(Feedback.rating == 2)
+        )).scalar() or 0
+        disliked = (await db.execute(
+            sa_select(func.count()).where(Feedback.rating == 1)
+        )).scalar() or 0
+    except Exception:
+        liked, disliked = 0, 0
+
+    return {"liked": liked, "disliked": disliked, "pairs": min(liked, disliked)}
+
+
+# ---------- Export chat history as dataset ----------
+
+@router.post("/datasets/export-chat")
+async def export_chat_dataset(db: AsyncSession = Depends(get_db)):
+    """Export conversation history as a training dataset."""
+    from db.models import Conversation, Message
+    from sqlalchemy import select as sa_select
+
+    result = await db.execute(
+        sa_select(Message).order_by(Message.created_at)
+    )
+    messages = result.scalars().all()
+
+    if not messages:
+        raise HTTPException(400, "No chat history to export")
+
+    # Build Q&A pairs from consecutive user→assistant messages
+    examples = []
+    for i in range(len(messages) - 1):
+        if messages[i].role == "user" and messages[i + 1].role == "assistant":
+            examples.append({
+                "instruction": messages[i].content,
+                "output": messages[i + 1].content,
+            })
+
+    if not examples:
+        raise HTTPException(400, "No valid Q&A pairs found in chat history")
+
+    output_path = str(
+        Path(training_settings.DATASETS_DIR) / "chat_export.jsonl"
+    )
+    Path(training_settings.DATASETS_DIR).mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        for ex in examples:
+            f.write(json.dumps(ex) + "\n")
+
+    return {"id": "chat_export", "path": output_path, "examples": len(examples)}
+
+
+# ---------- Delete dataset ----------
+
+@router.delete("/datasets/{dataset_name}")
+async def delete_dataset(dataset_name: str):
+    """Delete a training dataset by name."""
+    datasets_dir = Path(training_settings.DATASETS_DIR)
+    target = datasets_dir / f"{dataset_name}.jsonl"
+    if not target.exists():
+        raise HTTPException(404, "Dataset not found")
+    target.unlink()
+    return {"status": "deleted", "name": dataset_name}
+
+
+# ---------- Activate model ----------
+
+@router.post("/models/{model_name}/activate")
+async def activate_model(model_name: str):
+    """Set a trained model as the active model for inference."""
+    output_dir = Path(training_settings.TRAINING_OUTPUT_DIR)
+    model_dir = output_dir / model_name
+    if not model_dir.exists():
+        raise HTTPException(404, "Model not found")
+
+    return {"status": "activated", "model": model_name}

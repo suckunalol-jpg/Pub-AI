@@ -4,7 +4,7 @@ from typing import List
 
 class Settings(BaseSettings):
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/pub_ai"
+    DATABASE_URL: str = "sqlite+aiosqlite:///./pub_ai.db"
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
