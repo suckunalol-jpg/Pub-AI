@@ -15,15 +15,15 @@
 #   - TPU quota in your GCP project
 #   - HF_TOKEN environment variable set (for dataset access + pushing)
 #
-# Default: TPU v4-8 in us-central2-b (cheapest, most available)
+# Default: TPU v5litepod-4 in us-east5-b (matches account quota limits)
 # =============================================================================
 
 set -euo pipefail
 
 # ---- Configuration ----
-TPU_NAME="${TPU_NAME:-pub-ai-train}"
-TPU_TYPE="${TPU_TYPE:-v4-8}"
-ZONE="${ZONE:-us-central2-b}"
+TPU_NAME="${TPU_NAME:-pub-ai-test-us-east1}"
+TPU_TYPE="${TPU_TYPE:-v5litepod-4}"
+ZONE="${ZONE:-us-east1-c}"
 PROJECT="${PROJECT:-$(gcloud config get-value project 2>/dev/null)}"
 RUNTIME_VERSION="${RUNTIME_VERSION:-tpu-ubuntu2204-base}"
 REPO_URL="${REPO_URL:-https://github.com/suckunalol-jpg/Pub-AI.git}"
@@ -32,7 +32,7 @@ REPO_BRANCH="${REPO_BRANCH:-main}"
 # Training config
 EPOCHS="${EPOCHS:-2}"
 BATCH_SIZE="${BATCH_SIZE:-1}"
-GRAD_ACCUM="${GRAD_ACCUM:-16}"
+GRAD_ACCUM="${GRAD_ACCUM:-32}"
 LR="${LR:-2e-4}"
 LORA_RANK="${LORA_RANK:-64}"
 MAX_SEQ_LEN="${MAX_SEQ_LEN:-4096}"
@@ -125,15 +125,16 @@ source ~/pub-ai-env/bin/activate
 
 echo "=== Installing PyTorch/XLA for TPU ==="
 pip install --quiet --upgrade pip
-pip install --quiet torch torch_xla[tpu] -f https://storage.googleapis.com/libtpu-releases/index.html
+pip install --quiet torch~=2.3.0 torch_xla[tpu]~=2.3.0 -f https://storage.googleapis.com/libtpu-releases/index.html
 
 echo "=== Installing training dependencies ==="
-pip install --quiet transformers>=4.40.0 datasets>=2.18.0 peft>=0.10.0 trl>=0.8.0
+pip install --quiet transformers==4.43.3 datasets>=2.18.0 peft>=0.10.0 trl==0.9.6
 pip install --quiet accelerate>=0.28.0 tokenizers sentencepiece protobuf
 pip install --quiet huggingface_hub safetensors
 
 echo "=== Verifying TPU ==="
 python3 -c "
+import torch
 import torch_xla.core.xla_model as xm
 device = xm.xla_device()
 print(f'TPU device: {device}')

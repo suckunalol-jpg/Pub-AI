@@ -146,7 +146,7 @@ def load_and_format_datasets(max_seq_len: int, dry_run: bool = False):
 
         log.info(f"Loading {name} (split={split}, sample={sample})...")
         try:
-            ds = load_dataset(name, split=split, trust_remote_code=True)
+            ds = load_dataset(name, split=split)
 
             if sample and len(ds) > sample:
                 ds = ds.shuffle(seed=42).select(range(sample))
