@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   MessageSquare,
-  Bot,
   Workflow,
   BookOpen,
   Brain,
@@ -29,7 +28,6 @@ interface SidebarProps {
 // Items visible to everyone
 const publicNavItems: { id: ActiveView; label: string; icon: React.ElementType }[] = [
   { id: "chat", label: "Chat", icon: MessageSquare },
-  { id: "agents", label: "Agents", icon: Bot },
   { id: "ide", label: "IDE", icon: Code2 },
   { id: "roblox", label: "Roblox API", icon: Gamepad2 },
 ];

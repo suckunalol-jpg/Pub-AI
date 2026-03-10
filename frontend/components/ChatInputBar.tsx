@@ -11,12 +11,15 @@ import { useThemeStore } from "@/lib/themeStore";
 const SLASH_COMMANDS = [
   { name: "clear", description: "Clear the current chat", usage: "/clear", type: "local" },
   { name: "new", description: "Start a new conversation", usage: "/new", type: "local" },
+  { name: "agents", description: "Create or manage AI agents", usage: "/agents", type: "local" },
+  { name: "effort", description: "Set reasoning effort (low, medium, high, max)", usage: "/effort <level>", type: "local" },
   { name: "theme", description: "Switch theme (default, terminal, midnight, mizzy)", usage: "/theme <name>", type: "local" },
   { name: "help", description: "Show all available commands", usage: "/help", type: "server" },
   { name: "export", description: "Export chat as markdown", usage: "/export", type: "local" },
   { name: "system", description: "Set a temporary system prompt", usage: "/system <prompt>", type: "server" },
   { name: "model", description: "Show or switch the AI model", usage: "/model [name]", type: "server" },
 ] as const;
+
 
 export interface Attachment {
   id: string;

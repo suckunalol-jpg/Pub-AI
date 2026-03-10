@@ -36,6 +36,7 @@ class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[uuid.UUID] = None
     model: Optional[str] = None
+    effort: Optional[str] = "high"  # low | medium | high | max
 
 
 class ChatResponse(BaseModel):
@@ -424,6 +425,263 @@ async def stream_message(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
+    )
+
+
+# ---------- Agentic Streaming (Claude Code-style tool calling) ----------
+
+MAX_AGENT_ITERATIONS = 25
+
+
+@router.post("/agent-stream")
+async def agent_stream_message(
+    req: ChatRequest,
+    request: Request,
+    user: User = Depends(get_current_user_from_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """SSE streaming endpoint with agentic tool-calling loop.
+
+    Like Claude Code: the AI can call any registered tool, observe results,
+    and keep iterating until the task is complete.
+
+    Emits events:
+      - status:      {phase, conversation_id}
+      - token:       {content}
+      - tool_call:   {tool, params, iteration}
+      - tool_result: {tool, success, output, iteration}
+      - code:        {language, content}
+      - done:        {message_id, model, conversation_id, iterations, tools_used}
+      - error:       {detail}
+    """
+    import re as _re
+    import time
+
+    from agents.system_prompts import CHAT_AGENT_SYSTEM_PROMPT
+    from agents.tools import execute_tool, tools_prompt
+
+    # --- Resolve / create conversation ---
+    if req.conversation_id:
+        result = await db.execute(
+            select(Conversation).where(
+                Conversation.id == req.conversation_id,
+                Conversation.user_id == user.id,
+            )
+        )
+        conversation = result.scalar_one_or_none()
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+    else:
+        conversation = Conversation(
+            user_id=user.id,
+            title=req.message[:80] if req.message else "New Chat",
+            platform="web",
+        )
+        db.add(conversation)
+        await db.flush()
+
+    # Log user message
+    user_msg = Message(
+        conversation_id=conversation.id,
+        role="user",
+        content=req.message,
+    )
+    db.add(user_msg)
+    await db.flush()
+
+    # --- Brain context ---
+    brain_ctx = await brain.build_context(db, user.id, req.message)
+    memory_ctx = brain_ctx["memory_context"]
+    adaptive = brain_ctx["adaptive_params"]
+
+    # Build message history
+    result = await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation.id)
+        .order_by(Message.created_at)
+    )
+    history = result.scalars().all()
+
+    # Build system prompt with tools
+    system_prompt = CHAT_AGENT_SYSTEM_PROMPT + "\n\n" + tools_prompt()
+    if memory_ctx:
+        system_prompt += f"\n\n--- USER MEMORY ---\n{memory_ctx}"
+    if adaptive.get("verbosity") == "concise":
+        system_prompt += "\n\nThis user prefers concise responses. Keep it short."
+    elif adaptive.get("verbosity") == "verbose":
+        system_prompt += "\n\nThis user prefers detailed, thorough responses."
+
+    # Apply effort level
+    effort = (req.effort or "high").lower()
+    effort_modifiers = {
+        "low": "\n\n[EFFORT: LOW] Be concise and fast. Skip detailed explanations. Give direct answers. Minimal tool usage — only call tools when strictly necessary.",
+        "medium": "\n\n[EFFORT: MEDIUM] Balance thoroughness with efficiency. Explain key points but skip obvious details. Use tools when they add clear value.",
+        "high": "",  # Default behavior — no modifier needed
+        "max": "\n\n[EFFORT: MAX] Apply maximum reasoning depth. Think step-by-step through every aspect. Be extremely thorough. Consider edge cases. Use multiple tools to verify results. Provide comprehensive explanations.",
+    }
+    system_prompt += effort_modifiers.get(effort, "")
+
+    messages_for_ai = [{"role": "system", "content": system_prompt}]
+    for msg in history:
+        messages_for_ai.append({"role": msg.role, "content": msg.content})
+
+    conv_id_str = str(conversation.id)
+
+    async def agent_event_generator() -> AsyncGenerator[str, None]:
+        """Agentic loop: Think → Call Tools → Observe → Repeat."""
+        full_content = ""
+        iteration = 0
+        tools_used = 0
+        start_time = time.perf_counter()
+
+        yield _sse_event("status", {"phase": "thinking", "conversation_id": conv_id_str})
+
+        try:
+            while iteration < MAX_AGENT_ITERATIONS:
+                iteration += 1
+
+                if await request.is_disconnected():
+                    break
+
+                # --- Think: get AI response ---
+                yield _sse_event("status", {"phase": "thinking"})
+
+                ai_content = ""
+                async for token in ai_provider.stream(
+                    messages=messages_for_ai,
+                    temperature=adaptive.get("temperature", 0.4),
+                    max_tokens=adaptive.get("max_tokens", 4096),
+                ):
+                    if await request.is_disconnected():
+                        return
+                    ai_content += token
+                    yield _sse_event("token", {"content": token})
+
+                    # Detect code blocks for live preview
+                    if "```" in token:
+                        yield _sse_event("status", {"phase": "coding"})
+
+                # Add AI response to message history
+                messages_for_ai.append({"role": "assistant", "content": ai_content})
+                full_content += ai_content
+
+                # --- Check for tool calls ---
+                tool_matches = list(_re.finditer(
+                    r"```tool\s*\n(.*?)\n```", ai_content, _re.DOTALL
+                ))
+
+                if not tool_matches:
+                    # No tools called — AI is done, this is the final answer
+                    break
+
+                # --- Execute tools ---
+                yield _sse_event("status", {"phase": "calling_tool"})
+
+                tool_results_text = []
+                for match in tool_matches:
+                    try:
+                        call = json.loads(match.group(1))
+                    except json.JSONDecodeError:
+                        tool_results_text.append("Error: Invalid JSON in tool call")
+                        continue
+
+                    tool_name = call.get("tool", "unknown")
+                    tool_params = call.get("params", {})
+                    tools_used += 1
+
+                    # Emit tool_call event to frontend
+                    yield _sse_event("tool_call", {
+                        "tool": tool_name,
+                        "params": tool_params,
+                        "iteration": iteration,
+                    })
+
+                    # Map tool names to phase indicators
+                    phase_map = {
+                        "web_search": "searching_web",
+                        "web_fetch": "searching_web",
+                        "read_file": "reading_file",
+                        "write_file": "writing_file",
+                        "edit_file": "writing_file",
+                        "multi_edit": "writing_file",
+                        "execute_code": "executing",
+                        "bash": "executing",
+                        "spawn_agent": "spawning_agent",
+                        "grep_search": "searching_knowledge",
+                        "codebase_search": "searching_knowledge",
+                    }
+                    tool_phase = phase_map.get(tool_name, "calling_tool")
+                    yield _sse_event("status", {"phase": tool_phase})
+
+                    # Execute the tool
+                    try:
+                        result = await execute_tool(tool_name, tool_params)
+                        output = result.output
+                        success = result.success
+                    except Exception as e:
+                        output = f"Tool error: {e}"
+                        success = False
+
+                    # Truncate very long outputs for the SSE event
+                    event_output = output[:2000] + "..." if len(output) > 2000 else output
+                    yield _sse_event("tool_result", {
+                        "tool": tool_name,
+                        "success": success,
+                        "output": event_output,
+                        "iteration": iteration,
+                    })
+
+                    tool_results_text.append(
+                        f"**{tool_name}** ({'OK' if success else 'FAILED'}):\n{output}"
+                    )
+
+                # Feed tool results back to the AI
+                observation = "Tool results:\n\n" + "\n\n---\n\n".join(tool_results_text)
+                messages_for_ai.append({"role": "user", "content": observation})
+
+                # Emit a separator token so frontend knows a new iteration is starting
+                separator = "\n\n"
+                full_content += separator
+                yield _sse_event("token", {"content": separator})
+
+            # --- Done ---
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+
+            # Save the full assistant response to DB
+            assistant_msg = Message(
+                conversation_id=conversation.id,
+                role="assistant",
+                content=full_content,
+                model_used="pub-ai",
+                tokens_in=0,
+                tokens_out=len(full_content),
+                latency_ms=latency_ms,
+            )
+            db.add(assistant_msg)
+            conversation.updated_at = datetime.utcnow()
+            await db.flush()
+            await db.commit()
+
+            yield _sse_event("done", {
+                "message_id": str(assistant_msg.id),
+                "model": "pub-ai",
+                "conversation_id": conv_id_str,
+                "latency_ms": latency_ms,
+                "iterations": iteration,
+                "tools_used": tools_used,
+            })
+
+        except Exception as e:
+            yield _sse_event("error", {"detail": str(e)})
+
+    return StreamingResponse(
+        agent_event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
         },
     )
 

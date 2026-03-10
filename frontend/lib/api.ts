@@ -62,14 +62,29 @@ export type StreamPhase =
   | "reviewing" | "summarizing" | "formatting";
 
 export interface StreamEvent {
-  type: "status" | "token" | "code" | "done" | "error";
+  type: "status" | "token" | "code" | "tool_call" | "tool_result" | "done" | "error";
   data: Record<string, unknown>;
+}
+
+export interface ToolCallEvent {
+  tool: string;
+  params: Record<string, unknown>;
+  iteration: number;
+}
+
+export interface ToolResultEvent {
+  tool: string;
+  success: boolean;
+  output: string;
+  iteration: number;
 }
 
 export interface StreamCallbacks {
   onStatus?: (phase: StreamPhase, conversationId?: string) => void;
   onToken?: (content: string) => void;
   onCode?: (language: string, content: string) => void;
+  onToolCall?: (event: ToolCallEvent) => void;
+  onToolResult?: (event: ToolResultEvent) => void;
   onDone?: (messageId: string, model: string, conversationId: string, latencyMs: number) => void;
   onError?: (detail: string) => void;
 }
@@ -88,13 +103,17 @@ export function streamMessage(
   // Fire-and-forget async — caller controls lifecycle via AbortController
   (async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/chat/stream`, {
+      const res = await fetch(`${API_BASE}/api/chat/agent-stream`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ conversation_id: conversationId, message }),
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          message,
+          effort: typeof window !== "undefined" ? (localStorage.getItem("pub_effort_level") || "high") : "high",
+        }),
         signal: controller.signal,
       });
 
@@ -146,6 +165,12 @@ export function streamMessage(
                     data.language as string,
                     data.content as string
                   );
+                  break;
+                case "tool_call":
+                  callbacks.onToolCall?.(data as unknown as ToolCallEvent);
+                  break;
+                case "tool_result":
+                  callbacks.onToolResult?.(data as unknown as ToolResultEvent);
                   break;
                 case "done":
                   callbacks.onDone?.(

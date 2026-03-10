@@ -240,7 +240,7 @@ async def _run_git(ws: Path, *args: str, cwd: Optional[Path] = None) -> dict:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
         return {
             "output": stdout.decode(errors="replace"),
             "error": stderr.decode(errors="replace"),
@@ -353,12 +353,47 @@ async def git_push(
 
 # ---------- Shell Execution ----------
 
+# Detect Git Bash on Windows
+import platform
+
+def _find_git_bash() -> Optional[str]:
+    """Find Git Bash executable on Windows."""
+    if platform.system() != "Windows":
+        return None
+    common_paths = [
+        r"C:\Program Files\Git\bin\bash.exe",
+        r"C:\Program Files (x86)\Git\bin\bash.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Git\bin\bash.exe"),
+    ]
+    for p in common_paths:
+        if os.path.isfile(p):
+            return p
+    # Try PATH
+    import shutil as _shutil
+    bash = _shutil.which("bash")
+    if bash and "git" in bash.lower():
+        return bash
+    return None
+
+
+GIT_BASH_PATH = _find_git_bash()
+
+
+@router.get("/shell/info")
+async def shell_info(user: User = Depends(get_current_user_from_token)):
+    """Return info about the available shell."""
+    return {
+        "shell": "git-bash" if GIT_BASH_PATH else ("bash" if platform.system() != "Windows" else "cmd"),
+        "git_bash_path": GIT_BASH_PATH,
+    }
+
+
 @router.post("/shell")
 async def run_shell(
     req: ShellRequest,
     user: User = Depends(get_current_user_from_token),
 ):
-    """Run a shell command within the user's workspace."""
+    """Run a shell command within the user's workspace (uses Git Bash on Windows if available)."""
     ws = _user_workspace(user)
     cwd = _safe_path(ws, req.cwd) if req.cwd else ws
 
@@ -366,13 +401,23 @@ async def run_shell(
         cwd = ws
 
     try:
-        proc = await asyncio.create_subprocess_shell(
-            req.command,
-            cwd=str(cwd),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            env={**os.environ, "HOME": str(ws), "TERM": "xterm-256color"},
-        )
+        if GIT_BASH_PATH:
+            # Use Git Bash as the shell on Windows
+            proc = await asyncio.create_subprocess_exec(
+                GIT_BASH_PATH, "-c", req.command,
+                cwd=str(cwd),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                env={**os.environ, "HOME": str(ws), "TERM": "xterm-256color"},
+            )
+        else:
+            proc = await asyncio.create_subprocess_shell(
+                req.command,
+                cwd=str(cwd),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                env={**os.environ, "HOME": str(ws), "TERM": "xterm-256color"},
+            )
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
         return {
             "output": stdout.decode(errors="replace"),
@@ -382,3 +427,4 @@ async def run_shell(
         return {"output": "Command timed out (30s limit)", "exit_code": 1}
     except Exception as e:
         return {"output": str(e), "exit_code": 1}
+

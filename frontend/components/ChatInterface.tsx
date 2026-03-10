@@ -8,7 +8,10 @@ import ChatInputBar from "./ChatInputBar";
 import ActionIndicator, { type AiPhase, type ActionEntry } from "./ActionIndicator";
 import { generateId } from "@/lib/utils";
 import * as api from "@/lib/api";
+import type { ToolCallEvent, ToolResultEvent } from "@/lib/api";
 import { useThemeStore } from "@/lib/themeStore";
+import { useEffortStore, type EffortLevel } from "@/lib/effortStore";
+import AgentCreatorModal from "./AgentCreatorModal";
 
 // Phase-to-summary mapping for action entries
 const phaseSummaries: Record<AiPhase, string> = {
@@ -30,6 +33,29 @@ const phaseSummaries: Record<AiPhase, string> = {
   formatting: "Formatting response...",
 };
 
+// Tool-name-to-friendly-label mapping
+const toolLabels: Record<string, string> = {
+  web_search: "🔍 Searching the web",
+  web_fetch: "🌐 Fetching webpage",
+  read_file: "📖 Reading file",
+  write_file: "📝 Writing file",
+  edit_file: "✏️ Editing file",
+  multi_edit: "✏️ Multi-editing file",
+  execute_code: "▶️ Executing code",
+  bash: "💻 Running command",
+  spawn_agent: "🤖 Spawning agent",
+  grep_search: "🔎 Searching code",
+  codebase_search: "🔎 Searching codebase",
+  list_dir: "📁 Listing directory",
+  file_search: "📂 Searching files",
+  git: "📌 Git operation",
+  delete_file: "🗑️ Deleting file",
+  create_project: "🏗️ Creating project",
+  roblox_scan: "🎮 Scanning Roblox scripts",
+  http_request: "🌐 HTTP request",
+  plan_tasks: "📋 Planning tasks",
+};
+
 // Memoize ChatMessage for the messages list
 const MemoizedChatMessage = memo(ChatMessage);
 
@@ -43,6 +69,9 @@ export default function ChatInterface() {
   const [aiPhase, setAiPhase] = useState<AiPhase>("thinking");
   const [streamingContent, setStreamingContent] = useState("");
   const [liveCode, setLiveCode] = useState("");
+  const [showAgentCreator, setShowAgentCreator] = useState(false);
+  const effortLevel = useEffortStore((s) => s.effort);
+  const setEffortLevel = useEffortStore((s) => s.setEffort);
   const [actions, setActions] = useState<ActionEntry[]>([]);
   const [showActions, setShowActions] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -110,6 +139,32 @@ export default function ChatInterface() {
           }
           break;
         }
+        case "agents":
+          setShowAgentCreator(true);
+          break;
+        case "effort": {
+          const level = args.trim().toLowerCase();
+          if (["low", "medium", "high", "max"].includes(level)) {
+            setEffortLevel(level as EffortLevel);
+            const emojiMap: Record<string, string> = { low: "⚡", medium: "⚖️", high: "🧠", max: "🔬" };
+            const infoMsg: Message = {
+              id: generateId(),
+              role: "assistant",
+              content: `${emojiMap[level]} Effort level set to **${level}**`,
+              timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, infoMsg]);
+          } else {
+            const infoMsg: Message = {
+              id: generateId(),
+              role: "assistant",
+              content: `Available effort levels:\n- ⚡ **low** — minimal thinking, fastest\n- ⚖️ **medium** — balanced\n- 🧠 **high** — deep reasoning (default)\n- 🔬 **max** — maximum deliberation\n\nUsage: \`/effort high\`\n\nCurrent: **${effortLevel}**`,
+              timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, infoMsg]);
+          }
+          break;
+        }
         case "help": {
           const helpMsg: Message = {
             id: generateId(),
@@ -121,6 +176,8 @@ export default function ChatInterface() {
               "|---------|-------------|",
               "| `/clear` | Clear the current chat |",
               "| `/new` | Start a new conversation |",
+              "| `/agents` | Create or manage AI agents |",
+              "| `/effort <level>` | Set reasoning effort (low/medium/high/max) |",
               "| `/theme <name>` | Switch theme |",
               "| `/help` | Show this help |",
               "| `/export` | Export chat as markdown |",
@@ -248,6 +305,34 @@ export default function ChatInterface() {
         },
         onCode(_language, content) {
           setLiveCode(content);
+        },
+        onToolCall(event: ToolCallEvent) {
+          // Add a tool call action entry
+          const label = toolLabels[event.tool] || `🔧 ${event.tool}`;
+          setActions((prev) => [
+            ...prev,
+            {
+              id: generateId(),
+              phase: "calling_tool" as AiPhase,
+              summary: `${label}`,
+              details: JSON.stringify(event.params, null, 2).slice(0, 300),
+              timestamp: new Date(),
+            },
+          ]);
+          setAiPhase("calling_tool");
+        },
+        onToolResult(event: ToolResultEvent) {
+          // Update the latest action with the result
+          setActions((prev) => {
+            if (prev.length === 0) return prev;
+            const updated = [...prev];
+            const last = { ...updated[updated.length - 1] };
+            const statusEmoji = event.success ? "✅" : "❌";
+            last.summary = `${statusEmoji} ${toolLabels[event.tool] || event.tool} — ${event.success ? "done" : "failed"}`;
+            last.details = event.output.slice(0, 500);
+            updated[updated.length - 1] = last;
+            return updated;
+          });
         },
         onDone(messageId, _model, convId) {
           setConversationId(convId);
@@ -392,6 +477,12 @@ export default function ChatInterface() {
 
       {/* Input bar -- extracted component to prevent re-renders on typing */}
       <ChatInputBar onSend={handleSend} onStop={handleStop} onSlashCommand={handleSlashCommand} isLoading={isLoading} />
+
+      {/* Agent Creator Modal — triggered by /agents slash command */}
+      <AgentCreatorModal
+        open={showAgentCreator}
+        onClose={() => setShowAgentCreator(false)}
+      />
     </div>
   );
 }

@@ -226,6 +226,7 @@ export default function IDEPanel() {
     ]);
     const [terminalInput, setTerminalInput] = useState("");
     const [runningCommand, setRunningCommand] = useState(false);
+    const [shellType, setShellType] = useState<string>("terminal");
     const terminalEndRef = useRef<HTMLDivElement>(null);
 
     // Sidebar panel
@@ -285,6 +286,22 @@ export default function IDEPanel() {
     }, []);
 
     useEffect(() => { loadGitStatus(); }, [loadGitStatus]);
+
+    // ---------- Load shell info ----------
+    useEffect(() => {
+        (async () => {
+            try {
+                const token = typeof window !== "undefined" ? localStorage.getItem("pub_token") : null;
+                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/ide/shell/info`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                });
+                if (res.ok) {
+                    const info = await res.json();
+                    setShellType(info.shell === "git-bash" ? "Git Bash" : info.shell === "bash" ? "Bash" : "Terminal");
+                }
+            } catch { /* ignore */ }
+        })();
+    }, []);
 
     // ---------- Open file ----------
     const openFile = useCallback(async (entry: FileEntry) => {
@@ -804,7 +821,7 @@ export default function IDEPanel() {
                                     <div className="flex items-center justify-between px-3 py-1 bg-[#161b22] border-b border-[#30363d]">
                                         <div className="flex items-center gap-2 text-[11px] text-gray-500">
                                             <TerminalIcon size={12} />
-                                            <span>Terminal</span>
+                                            <span>{shellType}</span>
                                         </div>
                                         <button onClick={() => setTerminalOpen(false)} className="p-0.5 rounded hover:bg-white/10">
                                             <X size={12} className="text-gray-500" />
@@ -822,7 +839,7 @@ export default function IDEPanel() {
                                         <div ref={terminalEndRef} />
                                     </div>
                                     <div className="flex items-center gap-2 px-3 py-1.5 border-t border-[#30363d]">
-                                        <span className="text-green-400 text-[12px] font-mono">❯</span>
+                                        <span className="text-green-400 text-[12px] font-mono">{shellType === "Git Bash" ? "$" : "❯"}</span>
                                         <input
                                             value={terminalInput}
                                             onChange={(e) => setTerminalInput(e.target.value)}

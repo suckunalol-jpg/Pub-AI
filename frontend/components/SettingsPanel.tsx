@@ -17,11 +17,16 @@ import {
   Sparkles,
   MessageSquare,
   Save,
+  Zap,
+  Scale,
+  Brain,
+  Microscope,
 } from "lucide-react";
 import GlassCard from "./GlassCard";
 import { cn } from "@/lib/utils";
 import * as api from "@/lib/api";
 import { useThemeStore, type ThemeName } from "@/lib/themeStore";
+import { useEffortStore, type EffortLevel } from "@/lib/effortStore";
 
 interface UserInfo {
   id: string;
@@ -155,6 +160,7 @@ export default function SettingsPanel() {
   const saveTimeout = useRef<ReturnType<typeof setTimeout>>();
 
   const { theme, setTheme } = useThemeStore();
+  const { effort, setEffort } = useEffortStore();
 
   const isAdmin =
     me?.role === "admin" || me?.role === "owner";
@@ -310,6 +316,54 @@ export default function SettingsPanel() {
             );
           })}
         </div>
+      </GlassCard>
+
+      {/* ── Effort Level ── */}
+      <GlassCard className="p-5">
+        <h3 className="text-sm font-semibold text-white mb-2 flex items-center gap-2">
+          <Brain size={16} className="text-accent" />
+          Effort Level
+        </h3>
+        <p className="text-xs text-gray-500 mb-4">
+          Controls how much reasoning the AI applies. Higher = more thorough but slower.
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {([
+            { id: "low" as EffortLevel, label: "Low", icon: Zap, description: "Fast responses", color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-500/30" },
+            { id: "medium" as EffortLevel, label: "Medium", icon: Scale, description: "Balanced", color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/30" },
+            { id: "high" as EffortLevel, label: "High", icon: Brain, description: "Deep reasoning", color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/30" },
+            { id: "max" as EffortLevel, label: "Max", icon: Microscope, description: "Maximum depth", color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/30" },
+          ]).map((lvl) => {
+            const Icon = lvl.icon;
+            const isActive = effort === lvl.id;
+            return (
+              <motion.button
+                key={lvl.id}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setEffort(lvl.id)}
+                className={cn(
+                  "relative flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all duration-200",
+                  isActive
+                    ? `${lvl.bg} ${lvl.border} ${lvl.color}`
+                    : "border-white/10 bg-white/5 text-gray-400 hover:bg-white/8 hover:border-white/20"
+                )}
+              >
+                {isActive && (
+                  <div className="absolute top-1.5 right-1.5">
+                    <Check size={10} className={lvl.color} />
+                  </div>
+                )}
+                <Icon size={18} className={isActive ? lvl.color : ""} />
+                <span className={cn("text-xs font-semibold", isActive ? lvl.color : "text-white")}>{lvl.label}</span>
+                <span className="text-[10px] text-gray-500">{lvl.description}</span>
+              </motion.button>
+            );
+          })}
+        </div>
+        <p className="text-[10px] text-gray-600 mt-2">
+          Tip: You can also use <code className="text-accent/80">/effort low</code> in chat.
+        </p>
       </GlassCard>
 
       {/* ── Custom Instructions ── */}

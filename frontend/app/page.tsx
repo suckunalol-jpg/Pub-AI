@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import BinaryRain from "@/components/BinaryRain";
 import Sidebar from "@/components/Sidebar";
 import ChatInterface from "@/components/ChatInterface";
-import AgentPanel from "@/components/AgentPanel";
 import AgentTabBar from "@/components/AgentTabBar";
 import AgentChatTab from "@/components/AgentChatTab";
 import IDEPanel from "@/components/IDEPanel";
@@ -20,7 +19,7 @@ import * as api from "@/lib/api";
 import { useThemeStore } from "@/lib/themeStore";
 import { useAgentTabStore } from "@/lib/agentTabStore";
 
-export type ActiveView = "chat" | "agents" | "ide" | "workflows" | "knowledge" | "training" | "roblox" | "settings";
+export type ActiveView = "chat" | "ide" | "workflows" | "knowledge" | "training" | "roblox" | "settings";
 
 function LoginScreen({ onLogin }: { onLogin: (username: string) => void }) {
   const [isRegister, setIsRegister] = useState(false);
@@ -188,8 +187,6 @@ export default function Home() {
         }
         return <ChatInterface />;
       }
-      case "agents":
-        return <AgentPanel />;
       case "ide":
         return <IDEPanel />;
       case "workflows":
