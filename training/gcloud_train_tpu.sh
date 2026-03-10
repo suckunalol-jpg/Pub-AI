@@ -115,7 +115,10 @@ gcloud compute tpus tpu-vm ssh "$TPU_NAME" \
     --command="$(cat <<'SETUP_EOF'
 set -euo pipefail
 
-echo "=== Installing system dependencies ==="
+echo "=== Cleaning up old processes and caches ==="
+sudo fuser -k -9 /dev/vfio/0 || echo "Not busy."
+rm -rf ~/.cache/huggingface/datasets || true
+rm -rf ~/pub-ai-tpu-output || true
 sudo apt-get update -qq
 sudo apt-get install -y -qq git python3-pip python3-venv
 
