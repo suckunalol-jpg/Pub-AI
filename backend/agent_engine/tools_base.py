@@ -79,17 +79,13 @@ def _fix_and_parse_json(text: str) -> Optional[dict]:
         return None
         
     # Common suffixes for cut-off JSON
-    suffixes = [
-        "",
-        '"',
-        '"}',
-        '}',
-        '}}',
-        '}}}',
-        '"]}',
-        ']}',
-        '""}',
-    ]
+    suffixes = ["", '"']
+    for i in range(1, 8):
+        suffixes.append("}" * i)
+        suffixes.append('"' + "}" * i)
+        suffixes.append("]" + "}" * i)
+        suffixes.append('"]' + "}" * i)
+        
     for suffix in suffixes:
         try:
             return json.loads(text + suffix)

@@ -235,14 +235,21 @@ class Agent:
                 # Call the LLM with streaming
                 full_response = ""
 
-                async def on_chunk(chunk: str, full: str):
+                async def on_token(token: str, full: str):
                     nonlocal full_response
                     full_response = full
+                    
+                    # Prevent raw JSON / tool calls from streaming to the user's UI
+                    if '{"tool_name":' in full or '{"tool":' in full or "```json" in full or '{"action":' in full:
+                        return
+                    
+                    await self.emit_event(AgentEvent(type="response_stream", content=token))
 
+                # Get response asynchronously (streaming if callback provided)
                 result = await self.chat_model.chat(
                     messages=messages,
                     stream=True,
-                    response_callback=on_chunk,
+                    response_callback=on_token,
                 )
                 full_response = result.response
 
