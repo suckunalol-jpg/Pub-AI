@@ -84,27 +84,45 @@ def parse_tool_call(text: str) -> Optional[dict]:
     ```
     This parser is tolerant of markdown fences, extra text, etc.
     """
-    # Try to find JSON block in the text
-    json_patterns = [
-        # ```json ... ``` blocks
-        r'```(?:json)?\s*(\{[^`]*"tool_name"[^`]*\})\s*```',
-        # Raw JSON objects with tool_name
-        r'(\{[^{}]*"tool_name"\s*:\s*"[^"]*"[^{}]*(?:\{[^{}]*\}[^{}]*)*\})',
-        # Alternate format with "tool" instead of "tool_name"
-        r'(\{[^{}]*"tool"\s*:\s*"[^"]*"[^{}]*(?:\{[^{}]*\}[^{}]*)*\})',
-    ]
+    # 1. Try to find explicit ```... ``` blocks first (ignore language identifier)
+    # We use non-greedy .*? to capture everything between the exact fences.
+    code_blocks = re.findall(r'```[a-zA-Z]*\s*(.*?)\s*```', text, re.DOTALL)
+    for block in code_blocks:
+        try:
+            parsed = json.loads(block.strip())
+            if isinstance(parsed, dict) and ("tool_name" in parsed or "tool" in parsed):
+                tool_name = parsed.get("tool_name", parsed.get("tool", ""))
+                tool_args = parsed.get("tool_args", parsed.get("args", {}))
+                if tool_name:
+                    return {"tool_name": tool_name, "tool_args": tool_args}
+        except json.JSONDecodeError:
+            continue
 
-    for pattern in json_patterns:
-        matches = re.findall(pattern, text, re.DOTALL)
-        if matches:
-            for match in matches:
+    # 2. Try to find any raw JSON block that contains 'tool_name'
+    # This regex looks for outer braces { ... } globally
+    raw_blocks = re.findall(r'(\{.*?\})', text, re.DOTALL)
+    for block in raw_blocks:
+        if '"tool_name"' in block or '"tool"' in block:
+            try:
+                # Attempt to parse. Because .*? is non-greedy, it might cut off early if there are nested braces.
+                # So we will try a more robust approach: find the indices of first { and last }.
+                pass
+            except json.JSONDecodeError:
+                pass
+                
+    # 3. Robust bracket matching for nested JSON
+    start_idx = text.find('{')
+    if start_idx != -1:
+        # Try to parse from the first '{' to the end, shrinking from the right until valid
+        for end_idx in range(len(text), start_idx, -1):
+            if text[end_idx-1] == '}':
                 try:
-                    parsed = json.loads(match)
-                    # Normalize keys
-                    tool_name = parsed.get("tool_name", parsed.get("tool", ""))
-                    tool_args = parsed.get("tool_args", parsed.get("args", {}))
-                    if tool_name:
-                        return {"tool_name": tool_name, "tool_args": tool_args}
+                    parsed = json.loads(text[start_idx:end_idx])
+                    if isinstance(parsed, dict) and ("tool_name" in parsed or "tool" in parsed):
+                        tool_name = parsed.get("tool_name", parsed.get("tool", ""))
+                        tool_args = parsed.get("tool_args", parsed.get("args", {}))
+                        if tool_name:
+                            return {"tool_name": tool_name, "tool_args": tool_args}
                 except json.JSONDecodeError:
                     continue
 
