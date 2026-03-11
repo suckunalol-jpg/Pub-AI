@@ -2,7 +2,7 @@
 
 import { useState, memo } from "react";
 import { motion } from "framer-motion";
-import { ThumbsUp, ThumbsDown, Bot } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Bot, Volume2, Square } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import CodeBlock from "./CodeBlock";
@@ -26,6 +26,31 @@ function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessagePr
   const [feedback, setFeedback] = useState<1 | 2 | null>(null);
   const theme = useThemeStore((s) => s.theme);
   const isUser = message.role === "user";
+
+  // TTS State
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const handlePlayTTS = () => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    
+    const synth = window.speechSynthesis;
+    
+    if (isPlaying) {
+      synth.cancel();
+      setIsPlaying(false);
+      return;
+    }
+
+    // Stop any currently playing audio before starting new one
+    synth.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(message.content);
+    utterance.onend = () => setIsPlaying(false);
+    utterance.onerror = () => setIsPlaying(false);
+    
+    setIsPlaying(true);
+    synth.speak(utterance);
+  };
 
   const handleFeedback = (rating: 1 | 2) => {
     setFeedback(rating);
@@ -169,6 +194,16 @@ function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessagePr
 
           {!isUser && (
             <div className="flex items-center gap-1">
+              <button
+                onClick={handlePlayTTS}
+                className={cn(
+                  "p-1 rounded transition-colors",
+                  isPlaying ? "text-accent animate-pulse" : "text-gray-600 hover:text-gray-400"
+                )}
+                title={isPlaying ? "Stop listening" : "Listen to message"}
+              >
+                {isPlaying ? <Square size={12} /> : <Volume2 size={12} />}
+              </button>
               <button
                 onClick={() => handleFeedback(2)}
                 className={cn(

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useLayoutEffect, useCallback, useEffect, useMemo } from "react";
-import { Send, Square, Slash, Paperclip, X, FileText, Image as ImageIcon } from "lucide-react";
+import { Send, Square, Slash, Paperclip, X, FileText, Image as ImageIcon, Mic } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import GlassCard from "./GlassCard";
 import * as api from "../lib/api";
@@ -46,6 +46,53 @@ export default function ChatInputBar({ onSend, onStop, onSlashCommand, isLoading
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Speech Recognition State
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Initialize Web Speech API
+    if (typeof window !== "undefined") {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = false;
+        recognitionRef.current.interimResults = false;
+        
+        recognitionRef.current.onresult = (event: any) => {
+          let transcript = "";
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            transcript += event.results[i][0].transcript;
+          }
+          setInput((prev) => prev + (prev && !prev.endsWith(" ") ? " " : "") + transcript);
+        };
+        
+        recognitionRef.current.onerror = (event: any) => {
+          console.error("Speech recognition error", event.error);
+          setIsListening(false);
+        };
+        
+        recognitionRef.current.onend = () => {
+          setIsListening(false);
+        };
+      }
+    }
+  }, []);
+
+  const toggleListen = useCallback(() => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      if (recognitionRef.current) {
+        recognitionRef.current.start();
+        setIsListening(true);
+      } else {
+        alert("Speech recognition is not supported in this browser.");
+      }
+    }
+  }, [isListening]);
 
   // Filter commands based on typed text after "/"
   const filteredCommands = useMemo(() => {
@@ -266,6 +313,16 @@ export default function ChatInputBar({ onSend, onStop, onSlashCommand, isLoading
             className="flex-1 bg-transparent text-sm text-blue-100 placeholder-blue-800/50 resize-none outline-none max-h-40 mb-2 leading-relaxed"
             spellCheck={false}
           />
+          {/* Mic button */}
+          <button
+            onClick={toggleListen}
+            className={`p-2 mb-1 transition-colors ${
+              isListening ? "text-red-500 animate-pulse" : "text-blue-500 hover:text-blue-400"
+            }`}
+            title={isListening ? "Stop listening" : "Start speaking"}
+          >
+            <Mic size={16} />
+          </button>
           {isLoading ? (
             <button onClick={onStop} className="p-2 mb-1 text-red-500 hover:text-red-400">
               <Square size={16} />
@@ -296,6 +353,17 @@ export default function ChatInputBar({ onSend, onStop, onSlashCommand, isLoading
             title="Attach file"
           >
             <Paperclip size={18} className={uploading ? "animate-spin" : ""} />
+          </button>
+
+          {/* Mic button */}
+          <button
+            onClick={toggleListen}
+            className={`flex-shrink-0 p-2 rounded-xl transition-all ${
+              isListening ? "text-red-400 bg-red-500/10 animate-pulse" : "text-gray-400 hover:text-white hover:bg-white/5"
+            }`}
+             title={isListening ? "Stop listening" : "Start speaking"}
+          >
+            <Mic size={18} />
           </button>
 
           <textarea

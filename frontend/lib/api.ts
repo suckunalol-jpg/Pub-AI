@@ -69,25 +69,29 @@ export interface StreamEvent {
 export interface ToolCallEvent {
   tool: string;
   params: Record<string, unknown>;
-  iteration: number;
+  iteration?: number;
+  agentName?: string;
 }
 
 export interface ToolResultEvent {
   tool: string;
   success: boolean;
   output: string;
-  iteration: number;
+  iteration?: number;
+  agentName?: string;
 }
 
 export interface StreamCallbacks {
-  onStatus?: (phase: StreamPhase, conversationId?: string) => void;
-  onToken?: (content: string) => void;
-  onCode?: (language: string, content: string) => void;
+  onStatus?: (phase: StreamPhase, conversationId?: string, agentName?: string) => void;
+  onToken?: (content: string, agentName?: string) => void;
+  onCode?: (language: string, content: string, agentName?: string) => void;
   onToolCall?: (event: ToolCallEvent) => void;
   onToolResult?: (event: ToolResultEvent) => void;
-  onDone?: (messageId: string, model: string, conversationId: string, latencyMs: number) => void;
-  onError?: (detail: string) => void;
+  onDone?: (messageId: string, model: string, conversationId: string, latencyMs: number, agentName?: string) => void;
+  onError?: (detail: string, agentName?: string) => void;
+  onAgentDone?: (agentName: string) => void;
 }
+
 
 /**
  * Stream a chat message via SSE. Returns an AbortController to cancel the stream.
@@ -204,6 +208,122 @@ export function streamMessage(
         return;
       }
       callbacks.onError?.(err instanceof Error ? err.message : "Stream connection failed");
+    }
+  })();
+
+  return controller;
+}
+
+/**
+ * Stream a chat message via the Agent Engine (Agent Zero agentic loop).
+ * Same SSE event format as streamMessage, but routes through the agentic
+ * tool-calling loop (code execution, web search, memory, subordinates, etc.)
+ */
+export function streamAgentEngine(
+  conversationId: string | null,
+  message: string,
+  callbacks: StreamCallbacks,
+  targetAgent: string = "Main Agent",
+  attachments?: any[]
+): AbortController {
+  const controller = new AbortController();
+  const token = typeof window !== "undefined" ? localStorage.getItem("pub_token") : null;
+
+  (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/chat/stream/agent`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          message,
+          effort: typeof window !== "undefined" ? (localStorage.getItem("pub_effort_level") || "high") : "high",
+          target_agent: targetAgent,
+          attachments,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        callbacks.onError?.(err.detail || `Agent stream failed: ${res.status}`);
+        return;
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        callbacks.onError?.("ReadableStream not supported");
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = "";
+
+        let currentEvent = "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            currentEvent = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            const rawData = line.slice(6);
+            try {
+              const data = JSON.parse(rawData);
+              switch (currentEvent) {
+                case "status":
+                  callbacks.onStatus?.(data.phase, data.conversation_id, data.agent_name);
+                  break;
+                case "token":
+                  callbacks.onToken?.(data.content, data.agent_name);
+                  break;
+                case "tool_call":
+                  callbacks.onToolCall?.({
+                    tool: data.tool_name,
+                    params: data.tool_args || {},
+                    agentName: data.agent_name,
+                  } as unknown as ToolCallEvent);
+                  break;
+                case "tool_result":
+                  callbacks.onToolResult?.({
+                    tool: data.tool_name,
+                    output: data.content || "",
+                    success: true,
+                    agentName: data.agent_name,
+                  } as unknown as ToolResultEvent);
+                  break;
+                case "done":
+                  callbacks.onDone?.(data.message_id, data.model, data.conversation_id, data.latency_ms, data.agent_name);
+                  break;
+                case "agent_done":
+                  callbacks.onAgentDone?.(data.agent_name);
+                  break;
+                case "error":
+                  callbacks.onError?.(data.detail, data.agent_name);
+                  break;
+              }
+            } catch {
+              buffer = line + "\n";
+            }
+            currentEvent = "";
+          } else if (line === "") {
+            currentEvent = "";
+          } else {
+            buffer += line + "\n";
+          }
+        }
+      }
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      callbacks.onError?.(err instanceof Error ? err.message : "Agent stream failed");
     }
   })();
 

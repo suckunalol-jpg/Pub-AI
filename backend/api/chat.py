@@ -9,6 +9,7 @@ Every interaction:
 """
 
 import json
+import time
 import uuid
 from datetime import datetime
 from typing import AsyncGenerator, Optional
@@ -37,6 +38,8 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[uuid.UUID] = None
     model: Optional[str] = None
     effort: Optional[str] = "high"  # low | medium | high | max
+    target_agent: Optional[str] = "Main Agent"
+    attachments: Optional[list[dict]] = None
 
 
 class ChatResponse(BaseModel):
@@ -425,6 +428,186 @@ async def stream_message(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
+    )
+
+
+# ---------- Agent-Powered Streaming ----------
+
+# Global agent instances keyed by conversation_id for persistence
+_agent_instances: dict[str, "AgentInstance"] = {}
+
+
+class AgentInstance:
+    """Wrapper to hold an Agent instance tied to a conversation."""
+    def __init__(self, conversation_id: str):
+        from agent_engine.agent import Agent, AgentConfig
+        from agent_engine.models import default_chat_config
+        config = AgentConfig(chat_model=default_chat_config())
+        self.agent = Agent(config=config)
+        self.conversation_id = conversation_id
+
+
+def _get_or_create_agent(conversation_id: str) -> "AgentInstance":
+    """Get existing agent for a conversation or create a new one."""
+    if conversation_id not in _agent_instances:
+        _agent_instances[conversation_id] = AgentInstance(conversation_id)
+    return _agent_instances[conversation_id]
+
+
+@router.post("/stream/agent")
+async def stream_agent_message(
+    req: ChatRequest,
+    request: Request,
+    user: User = Depends(get_current_user_from_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """SSE streaming endpoint powered by the Agent Engine.
+
+    Uses the agentic loop from Agent Zero: the AI can call tools,
+    execute code, search the web, save memories, and delegate to
+    subordinate agents — all streamed in real-time via SSE.
+
+    Emits events:
+      - status:      {phase: thinking|tool_call|executing|done}
+      - token:       {content: str}
+      - tool_call:   {tool_name: str, tool_args: dict}
+      - tool_result: {tool_name: str, content: str}
+      - response:    {content: str}
+      - done:        {message_id: str, conversation_id: str}
+      - error:       {detail: str}
+    """
+
+    # --- Resolve / create conversation ---
+    if req.conversation_id:
+        result = await db.execute(
+            select(Conversation).where(
+                Conversation.id == req.conversation_id,
+                Conversation.user_id == user.id,
+            )
+        )
+        conversation = result.scalar_one_or_none()
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+    else:
+        conversation = Conversation(
+            user_id=user.id,
+            title=req.message[:80] if req.message else "New Chat",
+            platform="web",
+        )
+        db.add(conversation)
+        await db.flush()
+
+    # Log user message
+    user_msg = Message(
+        conversation_id=conversation.id,
+        role="user",
+        content=req.message,
+    )
+    db.add(user_msg)
+    await db.flush()
+
+    conv_id_str = str(conversation.id)
+
+    # Get or create agent instance for this conversation
+    agent_wrapper = _get_or_create_agent(conv_id_str)
+
+    async def agent_event_generator() -> AsyncGenerator[str, None]:
+        """Generates SSE events from the agent's tool-calling loop."""
+        start_time = time.perf_counter()
+        final_response = ""
+        
+        target_agent_name = req.target_agent or "Main Agent"
+        
+        # Decide which agent instance should process the message
+        # The main agent handles its own messages and acts as the registry for subordinates.
+        active_agent = agent_wrapper.agent
+        if target_agent_name != "Main Agent" and target_agent_name in active_agent.sub_agents:
+            active_agent = active_agent.sub_agents[target_agent_name]
+        elif target_agent_name != "Main Agent":
+            yield _sse_event("error", {"detail": f"Sub-agent '{target_agent_name}' not found or active."})
+            return
+
+        yield _sse_event("status", {"phase": "thinking", "conversation_id": conv_id_str, "agent_name": target_agent_name})
+
+        try:
+            async for event in active_agent.process_message(req.message, attachments=req.attachments):
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    active_agent.cancel()
+                    break
+
+                agent_name = event.agent_name
+
+                if event.type == "thinking":
+                    yield _sse_event("status", {"phase": "thinking", "content": event.content, "agent_name": agent_name})
+
+                elif event.type == "response_stream":
+                    # Stream intermediate agent reasoning
+                    yield _sse_event("token", {"content": event.content, "agent_name": agent_name})
+
+                elif event.type == "tool_call":
+                    yield _sse_event("status", {"phase": "calling_tool", "agent_name": agent_name})
+                    yield _sse_event("tool_call", {
+                        "tool_name": event.data.get("tool_name", ""),
+                        "tool_args": event.data.get("tool_args", {}),
+                        "agent_name": agent_name,
+                    })
+
+                elif event.type == "tool_result":
+                    yield _sse_event("tool_result", {
+                        "tool_name": event.data.get("tool_name", ""),
+                        "content": event.content,
+                        "agent_name": agent_name,
+                    })
+
+                elif event.type == "response":
+                    if agent_name == "Main Agent":
+                        final_response = event.content
+                    yield _sse_event("token", {"content": event.content, "agent_name": agent_name})
+
+                elif event.type == "error":
+                    yield _sse_event("error", {"detail": event.content, "agent_name": agent_name})
+
+                elif event.type == "done":
+                    # If this is a sub-agent, just notify the UI it's done so it can update the tab
+                    if agent_name != "Main Agent":
+                        yield _sse_event("agent_done", {"agent_name": agent_name})
+
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+
+            # Save assistant message to DB
+            assistant_msg = Message(
+                conversation_id=conversation.id,
+                role="assistant",
+                content=final_response or "Agent completed without a response.",
+                model_used="pub-ai-agent",
+                tokens_in=0,
+                tokens_out=0,
+                latency_ms=latency_ms,
+            )
+            db.add(assistant_msg)
+            conversation.updated_at = datetime.now()
+            await db.flush()
+            await db.commit()
+
+            yield _sse_event("done", {
+                "message_id": str(assistant_msg.id),
+                "model": "pub-ai-agent",
+                "conversation_id": conv_id_str,
+                "latency_ms": latency_ms,
+            })
+
+        except Exception as e:
+            yield _sse_event("error", {"detail": str(e)})
+
+    return StreamingResponse(
+        agent_event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
         },
     )
 
