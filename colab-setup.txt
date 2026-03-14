@@ -1,0 +1,113 @@
+GOOGLE COLAB SETUP FOR PUB-AI
+==============================
+
+Go to: https://colab.research.google.com
+Create new notebook
+Paste each cell below and run with Shift+Enter
+
+
+CELL 1: Install vLLM and ngrok
+------------------------------
+!pip install vllm -q
+!pip install pyngrok -q
+
+
+CELL 2: Get ngrok token
+-----------------------
+# Go to https://ngrok.com/app/signup (free, no credit card)
+# Get your auth token from https://dashboard.ngrok.com/auth/your-authtoken
+# Copy-paste below:
+
+ngrok_token = "your_ngrok_token_here"  # REPLACE WITH YOUR TOKEN
+
+from pyngrok import ngrok
+ngrok.set_auth_token(ngrok_token)
+
+
+CELL 3: Start vLLM server with OpenAI API
+-------------------------------------------
+import subprocess
+import time
+import requests
+
+# Start vLLM in background
+proc = subprocess.Popen([
+    "python", "-m", "vllm.entrypoints.openai.api_server",
+    "--model", "suckunalol/pub-ai-merged",
+    "--port", "8000",
+    "--trust-remote-code",
+    "--gpu-memory-utilization", "0.9",
+    "--dtype", "auto"
+], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+print("[vLLM] Starting model load... (2-3 minutes)")
+time.sleep(30)
+
+# Check if server is ready
+for i in range(60):
+    try:
+        resp = requests.get("http://localhost:8000/v1/models", timeout=5)
+        if resp.status_code == 200:
+            print("[vLLM] Server ready!")
+            break
+    except:
+        pass
+    print(f"[vLLM] Waiting... {i+1}/60")
+    time.sleep(5)
+
+
+CELL 4: Expose via ngrok
+------------------------
+from pyngrok import ngrok
+
+# Create public URL
+public_url = ngrok.connect(8000, "http")
+print(f"\n[SUCCESS] API Endpoint: {public_url}/v1/chat/completions")
+print(f"\nUpdate your Pub-AI .env:")
+print(f"  VLLM_API_URL={public_url}/v1")
+print(f"  AI_PROVIDER=openai")
+
+# Keep tunnel alive
+ngrok_process = ngrok.get_ngrok_process()
+ngrok_process.proc.wait()
+
+
+CELL 5: Test the API (optional)
+--------------------------------
+import requests
+import json
+
+endpoint = "{public_url}/v1/chat/completions"  # Use the URL from CELL 4
+
+response = requests.post(endpoint, json={
+    "messages": [{"role": "user", "content": "Hello, say hello back"}],
+    "model": "suckunalol/pub-ai-merged",
+    "max_tokens": 100
+})
+
+print(json.dumps(response.json(), indent=2))
+
+
+IMPORTANT NOTES
+===============
+
+1. ngrok token: Get FREE at https://ngrok.com/app/signup
+   - Click "Auth" in dashboard
+   - Copy your authtoken
+   - Paste in CELL 2
+
+2. First run takes 3-5 minutes (model downloads + loads)
+
+3. The notebook will run for 2-4 hours before Colab times out
+   - You can restart it anytime
+   - Each restart gets a NEW ngrok URL
+   - Update your .env each time
+
+4. Once you have the URL, your Pub-AI CLI works instantly:
+   - Edit .env with the URL
+   - Restart CLI
+   - Done!
+
+5. For persistent hosting (no timeouts), upgrade later to:
+   - HuggingFace Spaces (€9/month with PRO)
+   - Groq free tier (14k requests/day, no GPU needed)

@@ -139,6 +139,37 @@ class ChatModel:
         return result
 
 
+# ── Local HuggingFace Chat Model ─────────────────────────────
+
+class LocalHFChatModel:
+    """Chat model backed by a local HuggingFace model (transformers or vLLM)."""
+
+    def __init__(self, config: ModelConfig, backend):
+        self.config = config
+        self._backend = backend  # LocalTransformersBackend or LocalVLLMBackend
+
+    async def chat(
+        self,
+        messages: list[dict],
+        stream: bool = True,
+        response_callback: Optional[Callable[[str, str], Awaitable[None]]] = None,
+        reasoning_callback: Optional[Callable[[str, str], Awaitable[None]]] = None,
+        **kwargs,
+    ) -> ChatResult:
+        """Generate a response using the local backend, matching ChatModel interface."""
+        result = ChatResult()
+        try:
+            result.response = await self._backend.generate(
+                messages,
+                max_tokens=kwargs.get("max_tokens", 4096),
+                stream_callback=response_callback if stream else None,
+            )
+        except Exception as e:
+            logger.error(f"Local HF model call failed: {e}")
+            raise
+        return result
+
+
 # ── Embedding Model ──────────────────────────────────────────
 
 class EmbeddingModel:
@@ -168,8 +199,23 @@ class EmbeddingModel:
 
 # ── Factory Functions ─────────────────────────────────────────
 
-def get_chat_model(config: ModelConfig) -> ChatModel:
-    """Create a ChatModel from a ModelConfig."""
+def get_chat_model(config: ModelConfig):
+    """Create a ChatModel (or LocalHFChatModel) from a ModelConfig."""
+    if config.provider == "local_hf":
+        from agent_engine.local_models import LocalTransformersBackend
+        backend = LocalTransformersBackend(
+            model_path=config.name,
+            device=config.kwargs.get("device", "auto"),
+            quantization=config.kwargs.get("quantization") or None,
+        )
+        return LocalHFChatModel(config, backend)
+    if config.provider == "local_vllm":
+        from agent_engine.local_models import LocalVLLMBackend
+        backend = LocalVLLMBackend(
+            base_url=config.api_base,
+            model_name=config.name or None,
+        )
+        return LocalHFChatModel(config, backend)
     return ChatModel(config)
 
 
@@ -186,13 +232,30 @@ def default_chat_config() -> ModelConfig:
     model_name = os.getenv("MODEL_IDENTIFIER", "deepseek-r1:14b")
     api_base = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 
-    # Auto-detect provider from env
-    if os.getenv("HF_INFERENCE_URL"):
+    # Auto-detect provider from env (priority order)
+    local_hf = os.getenv("LOCAL_HF_MODEL", "")
+    if local_hf:
+        return ModelConfig(
+            type=ModelType.CHAT,
+            provider="local_hf",
+            name=local_hf,
+            ctx_length=int(os.getenv("MODEL_CTX_LENGTH", "8192")),
+            kwargs={
+                "device": os.getenv("LOCAL_MODEL_DEVICE", "auto"),
+                "quantization": os.getenv("LOCAL_MODEL_QUANTIZATION", ""),
+            },
+        )
+
+    if os.getenv("VLLM_API_URL"):
+        # vLLM on GCP TPU or any server — OpenAI-compatible API
+        provider = "openai"
+        api_base = os.getenv("VLLM_API_URL", "")
+    elif os.getenv("HF_INFERENCE_URL"):
         provider = "huggingface"
         api_base = os.getenv("HF_INFERENCE_URL", "")
     elif os.getenv("OPENAI_API_KEY"):
         provider = "openai"
-        api_base = ""
+        api_base = os.getenv("OPENAI_API_BASE", "")
 
     return ModelConfig(
         type=ModelType.CHAT,

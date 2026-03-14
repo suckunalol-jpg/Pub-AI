@@ -35,15 +35,24 @@ class CallSubordinateTool(BaseTool):
         try:
             from agent_engine.agent import Agent, AgentConfig
 
-            # Create subordinate with same config but new number
+            # Create subordinate with same config but new number,
+            # inheriting the parent's execution sandbox settings
             sub_config = AgentConfig(
                 chat_model=self.agent.config.chat_model,
                 utility_model=self.agent.config.utility_model,
+                code_exec_enabled=self.agent.config.code_exec_enabled,
+                code_exec_docker=self.agent.config.code_exec_docker,
+                code_exec_ssh_addr=self.agent.config.code_exec_ssh_addr,
+                code_exec_ssh_port=self.agent.config.code_exec_ssh_port,
+                code_exec_ssh_user=self.agent.config.code_exec_ssh_user,
+                code_exec_ssh_pass=self.agent.config.code_exec_ssh_pass,
             )
 
-            # Add role to system prompt if provided
+            # Load role-specific system prompt (hacker, pentester, roblox, etc.)
+            # Falls back to generic sub-agent prompt for unknown roles
             if role:
-                sub_config.system_prompt = f"You are a specialized subordinate agent. Your role: {role}\n\nYou must complete the task given to you and return a clear result."
+                from ai.prompts import get_role_prompt
+                sub_config.system_prompt = get_role_prompt(role)
 
             subordinate = Agent(
                 config=sub_config,

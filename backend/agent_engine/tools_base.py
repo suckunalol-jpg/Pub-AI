@@ -66,6 +66,35 @@ def get_all_tools() -> dict[str, type[BaseTool]]:
     return dict(_tool_registry)
 
 
+def register_dynamic_tool(tool_or_name, description: str = "", execute_fn=None):
+    """Register a tool dynamically at runtime (used by MCP client, plugins, etc.).
+
+    Can be called as:
+      register_dynamic_tool(MyToolClass)          — register an existing BaseTool subclass
+      register_dynamic_tool("name", "desc", fn)   — create and register from a function
+    """
+    if isinstance(tool_or_name, type) and issubclass(tool_or_name, BaseTool):
+        # Direct class registration
+        _tool_registry[tool_or_name.name] = tool_or_name
+        logger.info(f"Dynamically registered tool: {tool_or_name.name}")
+        return tool_or_name
+
+    name = tool_or_name
+    cls = type(f"DynamicTool_{name}", (BaseTool,), {
+        "name": name,
+        "description": description,
+        "execute": lambda self: execute_fn(self.agent, self.args),
+    })
+    _tool_registry[name] = cls
+    logger.info(f"Dynamically registered tool: {name}")
+    return cls
+
+
+def unregister_tool(name: str):
+    """Remove a tool from the registry."""
+    _tool_registry.pop(name, None)
+
+
 # Register built-in tools
 register_tool(ResponseTool)
 

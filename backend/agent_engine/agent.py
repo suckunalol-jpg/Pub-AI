@@ -126,6 +126,34 @@ class Agent:
         self._cancelled = False
         self._event_queue: Optional[asyncio.Queue] = None
         self.sub_agents: dict[str, "Agent"] = {}
+        self._mcp_initialized = False
+
+    async def init_mcp_servers(self):
+        """Discover and register MCP server tools (called once on first use)."""
+        if self._mcp_initialized or self.parent:
+            return
+        self._mcp_initialized = True
+        try:
+            mcp_config = self._load_mcp_config()
+            if mcp_config:
+                from agent_engine.mcp_client import discover_and_register_mcp_servers
+                tools = await discover_and_register_mcp_servers(mcp_config)
+                if tools:
+                    logger.info(f"MCP tools registered: {tools}")
+        except Exception as e:
+            logger.warning(f"MCP server init failed: {e}")
+
+    def _load_mcp_config(self) -> list[dict]:
+        """Load MCP server config from ~/.pub-ai/mcp_servers.json or env."""
+        import json as _json
+        config_path = os.path.expanduser("~/.pub-ai/mcp_servers.json")
+        if os.path.isfile(config_path):
+            with open(config_path, "r") as f:
+                return _json.load(f)
+        env_val = os.getenv("MCP_SERVERS", "")
+        if env_val:
+            return _json.loads(env_val)
+        return []
 
     def register_sub_agent(self, subordinate: "Agent"):
         """Register a spawned sub-agent so the API can route direct messages to it."""
@@ -185,6 +213,9 @@ class Agent:
         self._cancelled = False
         self._event_queue = asyncio.Queue()
 
+        # Initialize MCP servers on first message (only for root agent)
+        await self.init_mcp_servers()
+
         async def _run():
             try:
                 # Add user message to history
@@ -234,15 +265,21 @@ class Agent:
 
                 # Call the LLM with streaming
                 full_response = ""
+                _contains_tool = False
 
                 async def on_token(token: str, full: str):
-                    nonlocal full_response
+                    nonlocal full_response, _contains_tool
                     full_response = full
-                    
-                    # Prevent raw JSON / tool calls from streaming to the user's UI
-                    if '{"tool_name":' in full or '{"tool":' in full or "```json" in full or '{"action":' in full:
+
+                    # Detect tool calls early — stop streaming to UI once we see JSON
+                    if not _contains_tool:
+                        if '{"tool_name"' in full or '{"tool"' in full or "```json" in full or '{"action"' in full:
+                            _contains_tool = True
+                            return
+
+                    if _contains_tool:
                         return
-                    
+
                     await self.emit_event(AgentEvent(type="response_stream", content=token))
 
                 # Get response asynchronously (streaming if callback provided)
@@ -252,9 +289,6 @@ class Agent:
                     response_callback=on_token,
                 )
                 full_response = result.response
-
-                # Stream the raw response
-                await self.emit_event(AgentEvent(type="response_stream", content=full_response))
 
                 # Add assistant response to history
                 self.history.add("assistant", full_response)
@@ -284,10 +318,10 @@ class Agent:
                         await self.emit_event(AgentEvent(type="done"))
                         return
 
-                    # Add tool result to history and continue loop
+                    # Add tool result to history and nudge the model to continue
                     self.history.add(
                         "user",
-                        f"Tool '{tool_name}' result:\n{tool_result}",
+                        f"[SYSTEM] Tool '{tool_name}' returned:\n{tool_result}\n\nNow continue. Use another tool or use the `response` tool to give your final answer.",
                         metadata={"tool_name": tool_name},
                     )
 
@@ -354,60 +388,70 @@ class Agent:
 
 DEFAULT_SYSTEM_PROMPT = """# Pub-AI Agent System
 
-## Your Role
-You are Pub-AI, an autonomous and intelligent AI agent. You have the ability to interact with the world by running tools.
-You DO NOT just write code and tell the user to run it. You execute the actions yourself by calling the tools.
+You are Pub-AI, an autonomous AI agent that DOES things by calling tools. You never just describe — you ACT.
 
-## Communication & Formatting
-- **WARNING:** Do NOT just write a python script and say "Here is a script to do X". You MUST execute a tool to do X yourself.
-- **WARNING:** Do NOT wrap your tool calls in conversational text like "I will now call the tool". Just call the tool.
-- Think step-by-step before calling a tool. Explain *why* you are calling it to the user.
-- If you encounter an error, DO NOT GIVE UP. Retry with a different approach.
+## Rules
+1. You MUST use tools. Do NOT write code and tell the user to run it. Run it yourself with `code_execution`.
+2. Output EXACTLY ONE tool call per response as a JSON block.
+3. Wait for the tool result before your next action.
+4. When done, ALWAYS use the `response` tool to give your final answer.
+5. If a tool errors, try a different approach. Do NOT give up.
 
 ## Tools Available
-You have access to the following tools:
 {{tools}}
 
-## Tool Usage Instructions [CRITICAL]
-To interact with the system, you must output a JSON object containing the tool you wish to call.
-You must use EXACTLY ONE tool call per response. You must wait for the system to reply with the tool result before taking your next action.
-
-### Valid Tool Format:
+## Tool Call Format
 ```json
-{
-    "tool_name": "exact_tool_name",
-    "tool_args": {
-        "argument1": "value1"
-    }
-}
+{"tool_name": "TOOL_NAME", "tool_args": {"arg": "value"}}
 ```
 
-### INVALID BEHAVIOR (DO NOT DO THIS)
-User: "Make a python exploit script"
-Pub-AI: "Here is the python script: ```python\nprint('exploit')\n```"
+## Key Tools
 
-### CORRECT BEHAVIOR (DO THIS)
-User: "Make a python exploit script"
-Pub-AI: "I will use the `execute_code` tool or delegate to the code agent to run a payload.
+**code_execution** — Run code: `{"tool_name": "code_execution", "tool_args": {"runtime": "python", "code": "print(1+1)"}}`
+Runtimes: python, nodejs, terminal
+
+**web_search** — Search web: `{"tool_name": "web_search", "tool_args": {"query": "how to X"}}`
+
+**read_file** — Read file: `{"tool_name": "read_file", "tool_args": {"path": "file.py"}}`
+
+**write_file** — Write file: `{"tool_name": "write_file", "tool_args": {"path": "file.py", "content": "..."}}`
+
+**edit_file** — Edit file: `{"tool_name": "edit_file", "tool_args": {"path": "file.py", "old_text": "old", "new_text": "new"}}`
+
+**list_files** — List files: `{"tool_name": "list_files", "tool_args": {"path": ".", "pattern": "*.py"}}`
+
+**memory_save** — Remember: `{"tool_name": "memory_save", "tool_args": {"text": "info", "area": "general"}}`
+
+**memory_load** — Recall: `{"tool_name": "memory_load", "tool_args": {"query": "search"}}`
+
+**call_subordinate** — Delegate: `{"tool_name": "call_subordinate", "tool_args": {"task": "do X", "role": "coder"}}`
+
+**browser_agent** — Browse: `{"tool_name": "browser_agent", "tool_args": {"task": "go to URL"}}`
+
+**scheduler** — Schedule: `{"tool_name": "scheduler", "tool_args": {"action": "create", "task": "do X", "interval": "1h"}}`
+
+**container_shell** — Run shell commands in your sandbox computer: `{"tool_name": "container_shell", "tool_args": {"command": "apt install -y ffmpeg && ffmpeg -version"}}`
+
+**container_python** — Run Python in sandbox: `{"tool_name": "container_python", "tool_args": {"code": "import requests; print(requests.get('https://httpbin.org/ip').json())"}}`
+
+**container_install** — Install packages: `{"tool_name": "container_install", "tool_args": {"packages": "flask redis", "manager": "pip"}}`
+
+**container_download** — Download file to sandbox: `{"tool_name": "container_download", "tool_args": {"url": "https://example.com/file.zip"}}`
+
+**container_upload** — Copy files host<->container: `{"tool_name": "container_upload", "tool_args": {"src": "/path/file", "dest": "/workspace/file", "direction": "to_container"}}`
+
+**git_ops** — Git operations: `{"tool_name": "git_ops", "tool_args": {"action": "commit", "message": "fix bug"}}`
+Actions: status, add, commit, push, pull, log, diff, branch, checkout, clone
+
+**vpn_proxy** — VPN/proxy management: `{"tool_name": "vpn_proxy", "tool_args": {"action": "check_ip"}}`
+Actions: connect_vpn, disconnect_vpn, set_proxy, check_ip
+
+**browser_screenshot** — Screenshot a page: `{"tool_name": "browser_screenshot", "tool_args": {"url": "https://example.com"}}`
+
+**browser_download** — Download via browser: `{"tool_name": "browser_download", "tool_args": {"url": "https://example.com/download"}}`
+
+**response** — Final answer (REQUIRED when done):
 ```json
-{
-    "tool_name": "execute_code",
-    "tool_args": {
-        "code": "print('exploit')",
-        "language": "python"
-    }
-}
-```"
-
-## Finishing the Task
-When you have successfully completed the user's request and need to provide them with the final answer, or if you need to ask them a clarifying question, you MUST use the special `response` tool.
-
-```json
-{
-    "tool_name": "response",
-    "tool_args": {
-        "text": "Your final conversational response to the user here."
-    }
-}
+{"tool_name": "response", "tool_args": {"text": "Here is your answer..."}}
 ```
 """

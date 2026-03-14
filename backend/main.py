@@ -62,11 +62,16 @@ async def _seed_default_model():
     from db.models import RegisteredModel
     from sqlalchemy import select
 
-    if not settings.HF_INFERENCE_URL and not settings.OLLAMA_HOST:
-        print("[Pub AI] WARNING: No model configured! Set HF_INFERENCE_URL or OLLAMA_HOST, or register via /api/models")
+    if not settings.VLLM_API_URL and not settings.HF_INFERENCE_URL and not settings.OLLAMA_HOST:
+        print("[Pub AI] WARNING: No model configured! Set VLLM_API_URL, HF_INFERENCE_URL, or OLLAMA_HOST, or register via /api/models")
         return
 
-    if settings.HF_INFERENCE_URL:
+    if settings.VLLM_API_URL:
+        provider_type = "openai-compatible"
+        endpoint_url = settings.VLLM_API_URL
+        api_token = None
+        model_id = settings.MODEL_IDENTIFIER or "pub-ai"
+    elif settings.HF_INFERENCE_URL:
         provider_type = "huggingface"
         endpoint_url = settings.HF_INFERENCE_URL
         api_token = settings.HF_API_TOKEN or None
@@ -77,7 +82,7 @@ async def _seed_default_model():
         api_token = None
         model_id = settings.MODEL_IDENTIFIER or "pub-ai"
     else:
-        print("[Pub AI] WARNING: No model configured! Set HF_INFERENCE_URL or OLLAMA_HOST")
+        print("[Pub AI] WARNING: No model configured! Set VLLM_API_URL, HF_INFERENCE_URL, or OLLAMA_HOST")
         return
 
     async with async_session() as session:

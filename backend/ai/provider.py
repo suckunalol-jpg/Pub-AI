@@ -125,6 +125,16 @@ class PubAIProvider:
             return self._cache[self._active_name]
 
         # 3. Bootstrap: build a temporary _ResolvedModel from env vars
+        if settings.VLLM_API_URL:
+            return _ResolvedModel(
+                name="pub-ai",
+                provider_type="openai-compatible",
+                endpoint_url=settings.VLLM_API_URL,
+                api_token=None,
+                model_identifier=settings.MODEL_IDENTIFIER or "pub-ai",
+                config={},
+            )
+
         if settings.HF_INFERENCE_URL:
             return _ResolvedModel(
                 name="pub-ai",

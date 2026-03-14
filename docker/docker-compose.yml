@@ -1,0 +1,40 @@
+# Pub-AI Docker Compose — sandbox + browser containers
+# Usage: docker compose -f docker/docker-compose.yml up -d
+
+version: "3.9"
+
+services:
+  pub-ai-sandbox:
+    container_name: pub-ai-sandbox
+    # Switch to pub-ai-kali for pentest mode:
+    #   image: pub-ai-kali
+    image: ${CONTAINER_IMAGE:-python:3.11-slim}
+    working_dir: /workspace
+    volumes:
+      - sandbox-workspace:/workspace
+    networks:
+      - pub-ai-net
+    # Keep alive
+    command: ["tail", "-f", "/dev/null"]
+    restart: unless-stopped
+
+  pub-ai-browser:
+    container_name: pub-ai-browser
+    image: mcr.microsoft.com/playwright:v1.49.0-jammy
+    working_dir: /workspace
+    volumes:
+      - sandbox-workspace:/workspace
+    networks:
+      - pub-ai-net
+    # Keep alive — browser sessions are driven via API calls
+    command: ["tail", "-f", "/dev/null"]
+    restart: unless-stopped
+    shm_size: "2gb"
+
+volumes:
+  sandbox-workspace:
+    driver: local
+
+networks:
+  pub-ai-net:
+    driver: bridge

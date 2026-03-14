@@ -1,3 +1,6 @@
+import json
+import os
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from typing import List
 
@@ -9,6 +12,9 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # Pub AI Model — vLLM on GCP TPU (OpenAI-compatible)
+    VLLM_API_URL: str = ""
+
     # Pub AI Model — HuggingFace Inference API
     HF_INFERENCE_URL: str = ""
     HF_API_TOKEN: str = ""
@@ -18,6 +24,9 @@ class Settings(BaseSettings):
 
     # Model identifier (e.g. llama-3.3-70b-versatile for Groq)
     MODEL_IDENTIFIER: str = ""
+
+    # AI Provider override (auto-detected if not set)
+    AI_PROVIDER: str = ""
 
     # Auth
     SECRET_KEY: str = "CHANGE-ME-IN-PRODUCTION"
@@ -31,6 +40,15 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> List[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
+    # Local HuggingFace model (transformers backend)
+    LOCAL_HF_MODEL: str = ""              # Path to local HF model (empty = disabled)
+    LOCAL_MODEL_DEVICE: str = "auto"      # "auto", "cuda", "cpu"
+    LOCAL_MODEL_QUANTIZATION: str = ""    # "", "4bit", "8bit"
+
+    # MCP Servers — JSON array of server configs, or path to config file
+    # Format: [{"name": "server", "command": "npx", "args": [...], "env": {}}]
+    MCP_SERVERS: str = ""  # JSON string from env, or empty to use ~/.pub-ai/mcp_servers.json
+
     # Execution sandbox
     EXEC_TIMEOUT_SECONDS: int = 10
     EXEC_MAX_OUTPUT_BYTES: int = 65536
@@ -39,3 +57,28 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def get_mcp_server_configs() -> list[dict]:
+    """Load MCP server configurations from env var or ~/.pub-ai/mcp_servers.json."""
+    # 1. Try the env var / settings field (JSON string)
+    if settings.MCP_SERVERS:
+        try:
+            configs = json.loads(settings.MCP_SERVERS)
+            if isinstance(configs, list):
+                return configs
+        except json.JSONDecodeError:
+            pass
+
+    # 2. Try the config file
+    config_path = Path.home() / ".pub-ai" / "mcp_servers.json"
+    if config_path.exists():
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                configs = json.load(f)
+            if isinstance(configs, list):
+                return configs
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    return []
