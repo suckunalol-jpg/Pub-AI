@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type ThemeName = "default" | "terminal" | "midnight" | "mizzy";
+export type ThemeName = "terminal" | "mizzy";
 
 interface ThemeStore {
   theme: ThemeName;
@@ -8,8 +8,8 @@ interface ThemeStore {
 }
 
 const getInitial = (): ThemeName => {
-  if (typeof window === "undefined") return "default";
-  return (localStorage.getItem("pub_theme") as ThemeName) || "default";
+  if (typeof window === "undefined") return "terminal";
+  return (localStorage.getItem("pub_theme") as ThemeName) || "terminal";
 };
 
 export const useThemeStore = create<ThemeStore>((set) => ({

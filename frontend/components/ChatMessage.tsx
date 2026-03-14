@@ -70,31 +70,83 @@ function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessagePr
   // Terminal Theme Layout
   if (theme === "terminal") {
     return (
-      <Wrapper {...(wrapperProps as any)} className="px-6 py-1.5 font-mono text-sm">
-        <div className="flex flex-col">
-          <div className={cn(
-            "chat-message-terminal",
-            isUser ? "chat-message-user" : "chat-message-ai"
-          )}>
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                pre({ children }) { return <div className="not-prose my-2">{children}</div>; },
-                code({ className, children, ...props }) {
-                  const match = /language-(\w+)/.exec(className || "");
-                  const codeString = String(children).replace(/\n$/, "");
-                  const isBlock = match || codeString.includes("\n");
-                  if (isBlock) return <CodeBlock code={codeString} language={match?.[1] || "text"} />;
-                  return <code className="text-blue-300 bg-blue-500/10 px-1 py-0.5 rounded" {...props}>{children}</code>;
-                },
-                p({ children }) { return <span className="mr-2 leading-relaxed">{children}</span>; },
-                ul({ children }) { return <ul className="list-disc ml-4 my-1 space-y-1 block w-full">{children}</ul>; },
-                ol({ children }) { return <ol className="list-decimal ml-4 my-1 space-y-1 block w-full">{children}</ol>; },
-              }}
-            >
-              {message.content}
-            </ReactMarkdown>
-            {isStreaming && <span className="inline-block w-2 h-4 bg-blue-400 ml-1 align-middle animate-typewriter-cursor" />}
+      <Wrapper {...(wrapperProps as any)} className="px-2 py-2 font-mono text-[13px] leading-relaxed w-full">
+        <div className="flex items-start gap-4 hover:bg-white/[0.02] transition-colors p-2 rounded-sm group">
+          
+          {/* Avatar / Prompt Prefix */}
+          <div className="flex-shrink-0 pt-0.5 select-none w-8 flex justify-end">
+            {isUser ? (
+              <span className="text-accent font-bold">$</span>
+            ) : (
+              <img src="/mascot.png" alt="Pub AI" className="w-6 h-6 object-contain filter grayscale opacity-70 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-300" />
+            )}
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            <div className={cn(
+              "break-words",
+              isUser ? "text-accent/90 mix-blend-screen" : "text-gray-300"
+            )}>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  pre({ children }) { return <div className="not-prose my-3 border border-[#30363d] rounded-md overflow-hidden bg-[#0d1117]">{children}</div>; },
+                  code({ className, children, ...props }) {
+                    const match = /language-(\w+)/.exec(className || "");
+                    const codeString = String(children).replace(/\n$/, "");
+                    const isBlock = match || codeString.includes("\n");
+                    if (isBlock) return <CodeBlock code={codeString} language={match?.[1] || "text"} />;
+                    return <code className="text-accent/90 bg-accent/10 px-1 py-0.5 rounded-sm mx-0.5 text-xs font-mono border border-accent/20" {...props}>{children}</code>;
+                  },
+                  p({ children }) { return <div className="mb-2 last:mb-0 leading-[1.6]">{children}</div>; },
+                  ul({ children }) { return <ul className="list-disc ml-5 mb-2 space-y-1 marker:text-accent/50">{children}</ul>; },
+                  ol({ children }) { return <ol className="list-decimal ml-5 mb-2 space-y-1 marker:text-accent/50">{children}</ol>; },
+                  a({ href, children }) { return <a href={href} className="text-accent hover:underline underline-offset-4" target="_blank" rel="noopener noreferrer">{children}</a>; },
+                  strong({ children }) { return <strong className="text-white font-semibold">{children}</strong>; },
+                  blockquote({ children }) { return <blockquote className="border-l-2 border-accent/50 pl-3 italic text-gray-400 my-2">{children}</blockquote>; }
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+              {isStreaming && <span className="inline-block w-2 h-4 bg-accent ml-1 align-middle animate-typewriter-cursor" />}
+            </div>
+            
+            {/* Tools & Feedback Footer */}
+            <div className="flex items-center gap-3 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <span className="text-[10px] text-gray-600 font-mono">
+                {formatTimestamp(message.timestamp)}
+              </span>
+
+              {!isUser && (
+                <div className="flex items-center gap-1.5 border border-[#30363d] rounded bg-[#0d1117] px-1 py-0.5">
+                  <button
+                    onClick={handlePlayTTS}
+                    className={cn(
+                      "p-1 rounded text-gray-500 hover:text-white transition-colors",
+                      isPlaying && "text-accent animate-pulse"
+                    )}
+                    title={isPlaying ? "Stop listening" : "Listen to message"}
+                  >
+                    {isPlaying ? <Square size={12} /> : <Volume2 size={12} />}
+                  </button>
+                  <div className="w-px h-3 bg-[#30363d]" />
+                  <button
+                    onClick={() => handleFeedback(2)}
+                    className={cn("p-1 rounded hover:text-green-400 transition-colors", feedback === 2 ? "text-green-400" : "text-gray-500")}
+                  >
+                    <ThumbsUp size={12} />
+                  </button>
+                  <button
+                    onClick={() => handleFeedback(1)}
+                    className={cn("p-1 rounded hover:text-red-400 transition-colors", feedback === 1 ? "text-red-400" : "text-gray-500")}
+                  >
+                    <ThumbsDown size={12} />
+                  </button>
+                </div>
+              )}
+            </div>
+
           </div>
         </div>
       </Wrapper>
@@ -109,9 +161,8 @@ function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessagePr
     >
       {/* AI avatar */}
       {!isUser && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-1"
-          style={{ background: "rgba(var(--accent-rgb, 0,170,255), 0.2)" }}>
-          <Bot size={16} style={{ color: "var(--accent)" }} />
+        <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center mt-1">
+          <img src="/mascot.png" alt="Pub AI" className="w-8 h-8 object-contain filter drop-shadow-[0_0_5px_rgba(91,139,184,0.5)]" />
         </div>
       )}
 

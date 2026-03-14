@@ -37,6 +37,7 @@ const config: Config = {
         "pulse-glow": "pulseGlow 2s ease-in-out infinite",
         "terminal-blink": "terminalBlink 1s step-end infinite",
         "typewriter-cursor": "typewriterCursor 0.6s step-end infinite",
+        "bounce-slow": "bounceSlow 3s ease-in-out infinite",
       },
       keyframes: {
         fadeIn: {
@@ -58,6 +59,10 @@ const config: Config = {
         typewriterCursor: {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0" },
+        },
+        bounceSlow: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-6px)" },
         },
       },
     },

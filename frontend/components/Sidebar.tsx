@@ -16,6 +16,8 @@ import {
   ShieldCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import * as api from "@/lib/api";
+import { useChatStore } from "@/lib/chatStore";
 import type { ActiveView } from "@/app/page";
 
 interface SidebarProps {
@@ -37,13 +39,30 @@ const adminNavItems: { id: ActiveView; label: string; icon: React.ElementType }[
 export default function Sidebar({ activeView, onViewChange }: SidebarProps) {
   const [username, setUsername] = useState<string | null>(null);
   const [role, setRole] = useState<string>("user");
+  const [history, setHistory] = useState<{id: string; title: string}[]>([]);
+  const { setSelectedConversationId } = useChatStore();
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       setUsername(localStorage.getItem("pub_username"));
       setRole(localStorage.getItem("pub_role") || "user");
+      
+      const fetchHistory = async () => {
+        try {
+          const data = await api.getConversations();
+          setHistory(data);
+        } catch {
+          // Ignore failures if user is not fully logged in or API fails
+        }
+      };
+      fetchHistory();
     }
   }, []);
+
+  const handleSelectConv = (id: string) => {
+    setSelectedConversationId(id);
+    onViewChange("chat");
+  };
 
   const isAdmin = role === "admin" || role === "owner";
   const navItems = isAdmin ? [...publicNavItems, ...adminNavItems] : publicNavItems;
@@ -109,19 +128,19 @@ export default function Sidebar({ activeView, onViewChange }: SidebarProps) {
           <span>Local Memory</span>
         </div>
         <div className="space-y-1">
-          {/* Mocked past conversations for UI aesthetic */}
-          <button className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-accent transition-colors truncate">
-            &gt; Agent Zero setup...
-          </button>
-          <button className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-accent transition-colors truncate">
-            &gt; Fix vLLM TPU error
-          </button>
-          <button className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-accent transition-colors truncate">
-            &gt; Frontend redesign
-          </button>
-          <button className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-accent transition-colors truncate">
-            &gt; Roblox API sync
-          </button>
+          {history.length > 0 ? (
+            history.map((h) => (
+              <button
+                key={h.id}
+                onClick={() => handleSelectConv(h.id)}
+                className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-accent transition-colors truncate"
+              >
+                &gt; {h.title || "New Thread"}
+              </button>
+            ))
+          ) : (
+            <div className="px-3 py-1.5 text-xs text-gray-600 truncate opacity-50">Empty Memory Bank</div>
+          )}
         </div>
       </div>
 

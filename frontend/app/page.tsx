@@ -116,9 +116,9 @@ function TerminalLoginScreen({ onLogin, onBack }: { onLogin: (username: string) 
         animate={{ opacity: 1, scale: 1 }}
         className="relative z-10 w-full max-w-lg mx-4"
       >
-        <div className="border border-accent/40 bg-[#020813] shadow-[0_0_30px_rgba(91,139,184,0.15)] rounded-sm overflow-hidden">
+        <div className="border border-accent/40 bg-black shadow-[0_0_30px_rgba(91,139,184,0.15)] rounded-sm overflow-hidden">
           {/* Terminal Header */}
-          <div className="border-b border-accent/40 bg-[#112038] px-4 py-2 flex justify-between items-center text-xs">
+          <div className="border-b border-accent/40 bg-[#0a1324] px-4 py-2 flex justify-between items-center text-xs">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-red-500/80 cursor-pointer hover:bg-red-400" onClick={onBack}></div>
               <div className="w-3 h-3 rounded-full bg-yellow-500/80"></div>
@@ -216,15 +216,18 @@ export default function Home() {
   const [activeView, setActiveView] = useState<ActiveView>("chat");
   const [authed, setAuthed] = useState<boolean | null>(null); // null = checking
   const [username, setUsername] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
   const theme = useThemeStore((s) => s.theme);
   const { tabs, activeTabId } = useAgentTabStore();
 
   useEffect(() => {
     const token = localStorage.getItem("pub_token");
     const user = localStorage.getItem("pub_username");
+    const r = localStorage.getItem("pub_role");
     if (token && user) {
       setAuthed(true);
       setUsername(user);
+      setRole(r);
       setStage("app");
     } else {
       setAuthed(false);
@@ -242,6 +245,7 @@ export default function Home() {
 
   const handleLogin = (user: string) => {
     setUsername(user);
+    setRole(localStorage.getItem("pub_role"));
     setAuthed(true);
     setStage("app");
   };
@@ -292,7 +296,7 @@ export default function Home() {
   return (
     <main className="relative h-screen w-screen flex flex-col overflow-hidden bg-black font-mono text-[#c8d6e5]" data-theme={theme}>
       {/* Top Application Header (Claude Code Style) */}
-      <header className="h-10 border-b border-accent/30 bg-[#112038]/50 flex items-center justify-between px-4 shrink-0">
+      <header className="h-10 border-b border-accent/30 bg-black flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex gap-1.5 mr-2">
             <div className="w-2.5 h-2.5 rounded-full bg-red-500/80"></div>
@@ -303,14 +307,14 @@ export default function Home() {
           <span className="text-xs font-bold font-arcade tracking-wider text-accent drop-shadow-[0_0_2px_rgba(91,139,184,0.5)]">PUBAI TERMINAL</span>
         </div>
         <div className="text-[10px] text-accent/60 tracking-widest uppercase">
-          [ USER: {username} ] | [ ENGINE: vLLM TPU ]
+          [ USER: {username} ] {role === "owner" && "| [ ENGINE: vLLM TPU ]"}
         </div>
       </header>
 
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden relative">
         <Sidebar activeView={activeView} onViewChange={setActiveView} />
-        <div className="flex-1 flex flex-col overflow-hidden relative bg-[#020813]">
+        <div className="flex-1 flex flex-col overflow-hidden relative bg-black">
           {/* Agent tab bar — shown when chat view has agent tabs */}
           {activeView === "chat" && <AgentTabBar />}
           {renderView()}

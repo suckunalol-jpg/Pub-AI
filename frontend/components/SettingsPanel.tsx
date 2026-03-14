@@ -110,7 +110,6 @@ function RoleDropdown({
   );
 }
 
-/* ── Theme Card ── */
 const THEMES: {
   id: ThemeName;
   label: string;
@@ -119,25 +118,11 @@ const THEMES: {
   preview: string; // gradient/color for preview swatch
 }[] = [
     {
-      id: "default",
-      label: "Default",
-      icon: MessageSquare,
-      description: "Classic blue glassmorphism",
-      preview: "linear-gradient(135deg, #0a0a1a 0%, #0d1b2a 50%, #00aaff22 100%)",
-    },
-    {
       id: "terminal",
       label: "Terminal",
       icon: Terminal,
       description: "CLI-style dark blue monospace",
       preview: "linear-gradient(135deg, #0c1220 0%, #0f1728 50%, #5b9bd522 100%)",
-    },
-    {
-      id: "midnight",
-      label: "Midnight",
-      icon: Moon,
-      description: "Pure black, blue-white gradient outlines",
-      preview: "linear-gradient(135deg, #000000 0%, #050505 50%, #3b82f622 100%)",
     },
     {
       id: "mizzy",

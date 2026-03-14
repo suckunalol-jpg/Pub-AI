@@ -9,6 +9,7 @@ import ActionIndicator, { type AiPhase, type ActionEntry } from "./ActionIndicat
 import { generateId } from "@/lib/utils";
 import * as api from "@/lib/api";
 import { useThemeStore } from "@/lib/themeStore";
+import { useChatStore } from "@/lib/chatStore";
 import { useEffortStore, type EffortLevel } from "@/lib/effortStore";
 import AgentCreatorModal from "./AgentCreatorModal";
 import IDEPanel from "./IDEPanel";
@@ -95,6 +96,7 @@ export default function ChatInterface() {
   const [showAgentCreator, setShowAgentCreator] = useState(false);
   const effortLevel = useEffortStore((s) => s.effort);
   const setEffortLevel = useEffortStore((s) => s.setEffort);
+  const { selectedConversationId, setSelectedConversationId } = useChatStore();
   const [agentMode, setAgentMode] = useState(false);
   const [showIDE, setShowIDE] = useState(false);
   
@@ -140,6 +142,36 @@ export default function ChatInterface() {
     return () => abortRef.current?.abort();
   }, []);
 
+  // Listen for conversation changes from Sidebar
+  useEffect(() => {
+    if (selectedConversationId && selectedConversationId !== conversationId) {
+      setConversationId(selectedConversationId);
+      setIsLoading(true);
+      
+      api.getConversation(selectedConversationId)
+        .then(data => {
+          updateAgentState(activeTab, () => ({
+            messages: data.messages.map(m => ({
+              id: generateId(),
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              timestamp: new Date(m.created_at)
+            })),
+            streamingContent: "",
+            liveCode: "",
+            actions: [],
+            status: "idle",
+            aiPhase: "thinking"
+          }));
+          setIsLoading(false);
+        })
+        .catch((err) => {
+          console.error("Failed to load conversation", err);
+          setIsLoading(false);
+        });
+    }
+  }, [selectedConversationId, conversationId, activeTab, updateAgentState]);
+
   // Check file count to auto-trigger IDE
   const checkProjectSize = useCallback(async () => {
     try {
@@ -163,8 +195,9 @@ export default function ChatInterface() {
     setAgentStates({ "Main Agent": { ...defaultAgentState } });
     setActiveTab("Main Agent");
     setConversationId(null);
+    setSelectedConversationId(null);
     setIsLoading(false);
-  }, []);
+  }, [setSelectedConversationId]);
 
   const handleSlashCommand = useCallback(
     (command: string, args: string) => {
@@ -393,7 +426,7 @@ export default function ChatInterface() {
               {/* Left Pane: Mascot and Welcome */}
               <div className="p-8 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-accent/20 relative">
                 <div className="text-accent font-bold mb-8 text-center text-lg">Welcome back {username}!</div>
-                <img src="/mascot.png" alt="Mascot" className="h-24 filter drop-shadow-[0_0_12px_rgba(91,139,184,0.7)] hover:scale-105 transition-transform duration-300" />
+                <img src="/mascot.png" alt="Mascot" className="h-24 filter drop-shadow-[0_0_12px_rgba(91,139,184,0.7)] hover:scale-105 transition-transform duration-300 animate-bounce-slow" />
                 
                 <div className="mt-8 text-center space-y-1 text-xs text-gray-500">
                   <div>Qwen 2.5 TPU with high effort · PubAI Pro</div>
