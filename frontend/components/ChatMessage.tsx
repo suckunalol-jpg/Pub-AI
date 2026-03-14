@@ -8,6 +8,7 @@ import remarkGfm from "remark-gfm";
 import CodeBlock from "./CodeBlock";
 import { cn, formatTimestamp } from "@/lib/utils";
 import { useThemeStore } from "@/lib/themeStore";
+import PixelMascot from "./PixelMascot";
 
 export interface Message {
   id: string;
@@ -78,7 +79,7 @@ function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessagePr
             {isUser ? (
               <span className="text-accent font-bold">$</span>
             ) : (
-              <img src="/mascot.png" alt="Pub AI" className="w-6 h-6 object-contain filter grayscale opacity-70 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-300" />
+              <PixelMascot phase="response" size={24} className="filter grayscale opacity-70 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-300" />
             )}
           </div>
 
@@ -162,7 +163,7 @@ function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessagePr
       {/* AI avatar */}
       {!isUser && (
         <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center mt-1">
-          <img src="/mascot.png" alt="Pub AI" className="w-8 h-8 object-contain filter drop-shadow-[0_0_5px_rgba(91,139,184,0.5)]" />
+          <PixelMascot phase="response" size={32} className="filter drop-shadow-[0_0_5px_rgba(91,139,184,0.5)]" />
         </div>
       )}
 

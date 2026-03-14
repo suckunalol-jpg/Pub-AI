@@ -3,11 +3,10 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Brain, Code, Terminal, Search, Eye, ChevronDown, ChevronRight,
-  Microscope, Map, Pencil, Bug, FileText, FilePlus, Globe, BookOpen, Bot,
-  Wrench, AlignLeft, Type
+  ChevronDown, ChevronRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import PixelMascot from "./PixelMascot";
 
 export type AiPhase =
   | "thinking"
@@ -46,100 +45,84 @@ interface ActionIndicatorProps {
 
 const phaseConfig: Record<
   AiPhase,
-  { icon: typeof Brain; label: string; color: string; glowColor: string }
+  { label: string; color: string; glowColor: string }
 > = {
   thinking: {
-    icon: Brain,
     label: "Thinking",
     color: "text-blue-400",
     glowColor: "rgba(96, 165, 250, 0.25)",
   },
   analyzing: {
-    icon: Microscope,
     label: "Analyzing request",
     color: "text-purple-400",
     glowColor: "rgba(192, 132, 252, 0.25)",
   },
   planning: {
-    icon: Map,
     label: "Planning approach",
     color: "text-blue-400",
     glowColor: "rgba(96, 165, 250, 0.25)",
   },
   writing: {
-    icon: Pencil,
     label: "Writing response",
     color: "text-green-400",
     glowColor: "rgba(74, 222, 128, 0.25)",
   },
   coding: {
-    icon: Code,
     label: "Writing code",
     color: "text-emerald-400",
     glowColor: "rgba(52, 211, 153, 0.25)",
   },
   debugging: {
-    icon: Bug,
     label: "Debugging",
     color: "text-red-400",
     glowColor: "rgba(248, 113, 113, 0.25)",
   },
   executing: {
-    icon: Terminal,
     label: "Executing code",
     color: "text-orange-400",
     glowColor: "rgba(251, 146, 60, 0.25)",
   },
   reading_file: {
-    icon: FileText,
     label: "Reading file",
     color: "text-gray-400",
     glowColor: "rgba(156, 163, 175, 0.25)",
   },
   writing_file: {
-    icon: FilePlus,
     label: "Writing file",
     color: "text-teal-400",
     glowColor: "rgba(45, 212, 191, 0.25)",
   },
   searching_web: {
-    icon: Globe,
     label: "Searching web",
     color: "text-violet-400",
     glowColor: "rgba(167, 139, 250, 0.25)",
   },
   searching_knowledge: {
-    icon: BookOpen,
     label: "Searching knowledge",
     color: "text-indigo-400",
     glowColor: "rgba(129, 140, 248, 0.25)",
   },
   spawning_agent: {
-    icon: Bot,
     label: "Spawning agent",
     color: "text-cyan-400",
     glowColor: "rgba(34, 211, 238, 0.25)",
   },
   calling_tool: {
-    icon: Wrench,
     label: "Using tool",
     color: "text-amber-400",
     glowColor: "rgba(251, 191, 36, 0.25)",
   },
   reviewing: {
-    icon: Eye,
     label: "Reviewing output",
     color: "text-cyan-400",
     glowColor: "rgba(34, 211, 238, 0.25)",
   },
   summarizing: {
-    icon: AlignLeft,
     label: "Summarizing",
     color: "text-blue-400",
     glowColor: "rgba(96, 165, 250, 0.25)",
   },
   formatting: {
-    icon: Type,
     label: "Formatting",
     color: "text-gray-400",
     glowColor: "rgba(156, 163, 175, 0.25)",
@@ -155,7 +138,7 @@ function ActionItem({
 }) {
   const [expanded, setExpanded] = useState(false);
   const config = phaseConfig[entry.phase];
-  const Icon = config.icon;
+  
 
   return (
     <motion.div
@@ -168,21 +151,11 @@ function ActionItem({
       <div className="flex flex-col items-center flex-shrink-0">
         <div
           className={cn(
-            "w-6 h-6 rounded-full flex items-center justify-center",
-            isLatest ? "" : "opacity-60"
+            "w-6 h-6 rounded-full flex items-center justify-center bg-black/40 border border-white/5",
+            isLatest ? "" : "opacity-60 grayscale"
           )}
-          style={{ background: config.glowColor }}
         >
-          {isLatest ? (
-            <motion.div
-              animate={{ scale: [1, 1.1, 1] }}
-              transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-            >
-              <Icon size={13} className={config.color} />
-            </motion.div>
-          ) : (
-            <Icon size={13} className={config.color} />
-          )}
+          <PixelMascot phase={entry.phase} size={14} className={isLatest ? "" : "opacity-80"} />
         </div>
         {/* Vertical connector line (hidden on latest since it's at the bottom) */}
         {!isLatest && (
@@ -268,7 +241,7 @@ export default function ActionIndicator({
 
   // If no actions yet, fall back to showing just the phase label
   if (actions.length === 0) {
-    const Icon = config.icon;
+    
     return (
       <motion.div
         initial={{ opacity: 0, y: 6 }}
@@ -278,15 +251,9 @@ export default function ActionIndicator({
         className={cn("flex items-center gap-3 px-8 py-3 action-bubble rounded-xl", className)}
       >
         <div
-          className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center"
-          style={{ background: config.glowColor }}
+          className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center bg-black/40 border border-white/5"
         >
-          <motion.div
-            animate={{ scale: [1, 1.1, 1] }}
-            transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-          >
-            <Icon size={13} className={config.color} />
-          </motion.div>
+          <PixelMascot phase={phase} size={14} />
         </div>
         <span className={cn("text-sm font-medium", config.color)}>
           {config.label}

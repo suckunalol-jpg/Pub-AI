@@ -77,7 +77,7 @@ export default function Sidebar({ activeView, onViewChange }: SidebarProps) {
   const isSettingsActive = activeView === "settings";
 
   return (
-    <aside className="relative w-64 h-full flex flex-col bg-[#01040a] border-r border-accent/30 z-20 font-mono text-sm shrink-0">
+    <aside className="relative w-64 h-full flex flex-col bg-black border-r border-accent/20 z-20 font-mono text-sm shrink-0">
       
       {/* User Info Header */}
       <div className="p-4 border-b border-accent/20 flex items-center gap-3">

@@ -18,6 +18,7 @@ import GlassCard from "@/components/GlassCard";
 import * as api from "@/lib/api";
 import { useThemeStore } from "@/lib/themeStore";
 import { useAgentTabStore } from "@/lib/agentTabStore";
+import PixelMascot from "@/components/PixelMascot";
 
 export type ActiveView = "chat" | "workflows" | "knowledge" | "training" | "roblox" | "settings";
 
@@ -116,15 +117,10 @@ function TerminalLoginScreen({ onLogin, onBack }: { onLogin: (username: string) 
         animate={{ opacity: 1, scale: 1 }}
         className="relative z-10 w-full max-w-lg mx-4"
       >
-        <div className="border border-accent/40 bg-black shadow-[0_0_30px_rgba(91,139,184,0.15)] rounded-sm overflow-hidden">
+        <div className="border border-accent/20 bg-black shadow-none rounded-sm overflow-hidden">
           {/* Terminal Header */}
-          <div className="border-b border-accent/40 bg-[#0a1324] px-4 py-2 flex justify-between items-center text-xs">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-red-500/80 cursor-pointer hover:bg-red-400" onClick={onBack}></div>
-              <div className="w-3 h-3 rounded-full bg-yellow-500/80"></div>
-              <div className="w-3 h-3 rounded-full bg-green-500/80"></div>
-            </div>
-            <span className="text-accent/80 font-bold tracking-wider opacity-80">PUBAI_AUTHORIZATION_TERMINAL</span>
+          <div className="border-b border-accent/20 bg-[#0a1324]/50 px-4 py-2 flex justify-between items-center text-xs">
+            <span className="text-accent/80 font-bold tracking-wider opacity-80">PUBAI_AUTHORIZATION</span>
             <div className="text-xs text-accent/50">v1.0.0</div>
           </div>
 
@@ -296,15 +292,10 @@ export default function Home() {
   return (
     <main className="relative h-screen w-screen flex flex-col overflow-hidden bg-black font-mono text-[#c8d6e5]" data-theme={theme}>
       {/* Top Application Header (Claude Code Style) */}
-      <header className="h-10 border-b border-accent/30 bg-black flex items-center justify-between px-4 shrink-0">
+      <header className="h-10 border-b border-accent/20 bg-black flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="flex gap-1.5 mr-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-red-500/80"></div>
-            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80"></div>
-            <div className="w-2.5 h-2.5 rounded-full bg-green-500/80"></div>
-          </div>
-          <img src="/logo.png" alt="PubAI" className="h-4 filter drop-shadow-[0_0_2px_rgba(91,139,184,0.8)]" />
-          <span className="text-xs font-bold font-arcade tracking-wider text-accent drop-shadow-[0_0_2px_rgba(91,139,184,0.5)]">PUBAI TERMINAL</span>
+          <img src="/logo.png" alt="PubAI" className="h-4 filter drop-shadow-[0_0_0_rgba(0,0,0,0)]" />
+          <span className="text-xs font-bold font-arcade tracking-wider text-accent drop-shadow-[0_0_0_rgba(0,0,0,0)]">PubAI</span>
         </div>
         <div className="text-[10px] text-accent/60 tracking-widest uppercase">
           [ USER: {username} ] {role === "owner" && "| [ ENGINE: vLLM TPU ]"}

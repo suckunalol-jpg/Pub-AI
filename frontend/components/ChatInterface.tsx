@@ -13,6 +13,7 @@ import { useChatStore } from "@/lib/chatStore";
 import { useEffortStore, type EffortLevel } from "@/lib/effortStore";
 import AgentCreatorModal from "./AgentCreatorModal";
 import IDEPanel from "./IDEPanel";
+import PixelMascot from "./PixelMascot";
 
 const phaseSummaries: Record<AiPhase, string> = {
   thinking: "Thinking...",
@@ -426,7 +427,7 @@ export default function ChatInterface() {
               {/* Left Pane: Mascot and Welcome */}
               <div className="p-8 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-accent/20 relative">
                 <div className="text-accent font-bold mb-8 text-center text-lg">Welcome back {username}!</div>
-                <img src="/mascot.png" alt="Mascot" className="h-24 filter drop-shadow-[0_0_12px_rgba(91,139,184,0.7)] hover:scale-105 transition-transform duration-300 animate-bounce-slow" />
+                <PixelMascot phase="idle" size={96} className="filter drop-shadow-[0_0_8px_rgba(91,139,184,0.3)] hover:scale-105 transition-transform duration-300" />
                 
                 <div className="mt-8 text-center space-y-1 text-xs text-gray-500">
                   <div>Qwen 2.5 TPU with high effort · PubAI Pro</div>
