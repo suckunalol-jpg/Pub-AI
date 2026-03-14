@@ -2,7 +2,7 @@
 
 import { useState, memo } from "react";
 import { motion } from "framer-motion";
-import { ThumbsUp, ThumbsDown, Bot, Volume2, Square } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Volume2, Square } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import CodeBlock from "./CodeBlock";

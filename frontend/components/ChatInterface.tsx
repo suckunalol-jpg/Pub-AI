@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, memo, useMemo } from "react";
 import { AnimatePresence } from "framer-motion";
-import { Bot, Plus, Zap } from "lucide-react";
+import { Plus, Zap } from "lucide-react";
 import ChatMessage, { type Message } from "./ChatMessage";
 import ChatInputBar from "./ChatInputBar";
 import ActionIndicator, { type AiPhase, type ActionEntry } from "./ActionIndicator";
@@ -382,18 +382,18 @@ export default function ChatInterface() {
       <div className="flex items-center justify-between px-4 py-1.5 bg-black border-b border-accent/20 shrink-0">
         <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar">
           {Object.keys(agentStates).map((agentName) => (
-            <button
-              key={agentName}
-              onClick={() => setActiveTab(agentName)}
-              className={`flex items-center gap-2 px-3 py-1 rounded-sm text-xs whitespace-nowrap transition-colors ${
-                activeTab === agentName
-                  ? "bg-accent/20 text-accent font-bold border border-accent/30"
-                  : "text-gray-500 hover:text-accent hover:bg-accent/5 border border-transparent"
-              }`}
-            >
-              <Bot size={12} className={activeTab === agentName ? "text-accent" : "text-gray-600"} />
-              {agentName}
-            </button>
+              <button
+                key={agentName}
+                onClick={() => setActiveTab(agentName)}
+                className={`flex items-center gap-2 px-3 py-1 rounded-sm text-xs whitespace-nowrap transition-colors ${
+                  activeTab === agentName
+                    ? "bg-accent/20 text-accent font-bold border border-accent/30"
+                    : "text-gray-500 hover:text-accent hover:bg-accent/5 border border-transparent"
+                }`}
+              >
+                <PixelMascot phase="idle" size={14} />
+                {agentName}
+              </button>
           ))}
         </div>
         <div className="flex items-center gap-3">
@@ -416,57 +416,41 @@ export default function ChatInterface() {
         {messages.length === 0 && !isLoading && (
           <div className="h-full flex flex-col justify-center px-8 lg:px-20 animate-fade-in relative max-w-5xl mx-auto">
             
-            {/* PubAI styled Zero State */}
-            <div className="text-accent/60 text-xs mb-6 flex items-center gap-3 uppercase tracking-widest">
-              <span className="w-12 h-px bg-accent/20" />
-              <span>PubAI v1.0</span>
-              <span className="w-12 h-px bg-accent/20" />
+            {/* ── PubAI styled zero state (matching Claude Code CLI layout exactly) ── */}
+            <div className="text-accent text-xs mb-0 font-mono">
+              <span className="text-gray-600">──</span> PubAI v1.0 <span className="text-gray-600">{'─'.repeat(50)}</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border border-accent/20 rounded-sm">
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_1.2fr] gap-0 border border-accent/30">
               
-              {/* Left Pane: Mascot and Welcome */}
-              <div className="p-10 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-accent/20 relative">
-                <img src="/logo.png" alt="PubAI" className="h-16 mb-4" />
-                <div className="text-accent font-bold mb-6 text-center text-lg">Welcome back {username}!</div>
-                <PixelMascot phase="idle" size={128} className="hover:scale-105 transition-transform duration-300" />
+              {/* Left Pane: Welcome + Mascot + Info */}
+              <div className="p-8 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-accent/30">
+                <div className="text-lg font-bold mb-6 text-center">Welcome back {username}!</div>
+                <PixelMascot phase="idle" size={80} />
                 
                 <div className="mt-8 text-center space-y-1 text-xs text-gray-500">
                   <div>Qwen 2.5 TPU with high effort · PubAI Pro</div>
                   <div>suckunalol@gmail.com's Organization</div>
-                  <div className="text-accent/60 my-1 font-mono">C:\Users\{username}</div>
+                  <div className="text-accent/80 font-mono">C:\Users\{username}</div>
                 </div>
               </div>
 
               {/* Right Pane: Recent Activity & What's New */}
-              <div className="p-6 flex flex-col gap-6 bg-accent/5">
+              <div className="p-6 flex flex-col gap-5">
                 
                 <section>
-                  <h3 className="text-accent/80 font-bold mb-2 text-xs uppercase tracking-widest">Recent activity</h3>
+                  <h3 className="text-accent font-bold mb-2 text-sm">Recent activity</h3>
                   <div className="text-gray-400 text-xs space-y-1">
-                    <div className="flex items-center gap-2 hover:text-accent cursor-pointer transition-colors">
-                      <span className="text-gray-600">↳</span> No recent activity
-                    </div>
+                    <div>No recent activity</div>
                   </div>
                 </section>
 
-                <div className="h-px bg-accent/10 w-full" />
-
                 <section>
-                  <h3 className="text-accent/80 font-bold mb-2 text-xs uppercase tracking-widest">What's new</h3>
+                  <h3 className="text-accent font-bold mb-2 text-sm">What's new</h3>
                   <div className="text-gray-400 text-xs space-y-2 leading-relaxed">
-                    <div className="flex items-start gap-2">
-                      <span className="text-accent mt-0.5">•</span>
-                      <span>Added actionable suggestions to `/context` command — identifying areas for automation.</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span className="text-accent mt-0.5">•</span>
-                      <span>Added `autoMemoryDirectory` setting to configure a custom directory for saved contexts.</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span className="text-accent mt-0.5">•</span>
-                      <span>Fixed memory leak where streaming API response buffers were not garbage collected.</span>
-                    </div>
+                    <div>Added actionable suggestions to `/context` command — identifying areas for automation.</div>
+                    <div>Added `autoMemoryDirectory` setting to configure a custom directory for saved contexts.</div>
+                    <div>Fixed memory leak where streaming API response buffers were not garbage collected.</div>
                     <div className="mt-3 text-accent/60 italic hover:text-accent cursor-pointer transition-colors">
                       /release-notes for more
                     </div>
@@ -476,9 +460,8 @@ export default function ChatInterface() {
               </div>
             </div>
 
-            <div className="mt-6 text-gray-500/80 text-xs flex justify-between items-center px-1">
-              <span>* Voice mode is now available · /voice to enable</span>
-              <span className="animate-pulse text-accent">_</span>
+            <div className="mt-4 text-gray-500 text-xs font-mono">
+              <span>✱ Voice mode is now available · /voice to enable</span>
             </div>
           </div>
         )}

@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 import { cn } from "@/lib/utils";
 import type { AiPhase } from "./ActionIndicator";
@@ -8,62 +10,93 @@ interface PixelMascotProps {
   size?: number;
 }
 
-export default function PixelMascot({ phase = "idle", className, size = 32 }: PixelMascotProps) {
-  // Map AI phases to emotions/actions
-  let expression = "smile";
-  let accessory = "none";
-  let animation = "";
+/**
+ * PubAI Mascot — pixel-accurate recreation of the blue pixel creature.
+ * 
+ * Structure (on a 16x16 grid):
+ * - Large rectangular head/body block (~10 wide, ~8 tall)
+ * - Small ear bumps on top-left and top-right corners (2px wide, 2px tall)
+ * - Two black 2x2 square eyes in the upper portion, well spaced apart
+ * - Side arm/bumps extending from mid-body on both sides
+ * - Four legs at bottom: two on each side with a gap in the middle
+ * - Subtle mouth indent below eyes
+ * 
+ * Base color: ~#5b6abf (medium blue matching the user's mascot)
+ */
+export default function PixelMascot({ phase = "idle", className, size = 48 }: PixelMascotProps) {
+  let eyeStyle: "normal" | "happy" | "thinking" | "wide" | "determined" | "wink" = "normal";
+  let mouthStyle: "neutral" | "smile" | "open" | "dash" = "neutral";
+  let showHat = false;
+  let showSparks = false;
+  let bouncing = false;
 
   switch (phase) {
+    case "idle":
+      eyeStyle = "normal";
+      mouthStyle = "neutral";
+      bouncing = true;
+      break;
     case "thinking":
     case "planning":
-      expression = "thinking";
-      animation = "animate-pulse";
+      eyeStyle = "thinking";
+      mouthStyle = "dash";
       break;
     case "analyzing":
     case "reviewing":
-      expression = "focused";
-      accessory = "monocle";
+      eyeStyle = "wide";
+      mouthStyle = "neutral";
       break;
     case "coding":
     case "writing":
     case "writing_file":
     case "formatting":
     case "summarizing":
-      expression = "focused";
-      accessory = "keyboard";
-      animation = "animate-bounce-slow";
+      eyeStyle = "determined";
+      mouthStyle = "dash";
+      showHat = true;
       break;
     case "debugging":
-      expression = "squint";
-      accessory = "bug";
+      eyeStyle = "wink";
+      mouthStyle = "open";
+      showSparks = true;
       break;
     case "executing":
     case "spawning_agent":
     case "calling_tool":
-      expression = "excited";
-      animation = "animate-bounce";
+      eyeStyle = "wide";
+      mouthStyle = "open";
+      showSparks = true;
       break;
     case "reading_file":
     case "searching_web":
     case "searching_knowledge":
-      expression = "wide";
-      accessory = "magnifier";
+      eyeStyle = "wide";
+      mouthStyle = "neutral";
       break;
     case "response":
-      expression = "happy";
+      eyeStyle = "happy";
+      mouthStyle = "smile";
       break;
-    case "idle":
     default:
-      expression = "smile";
+      eyeStyle = "normal";
+      mouthStyle = "neutral";
       break;
   }
 
-  // Base Pixel Art SVG using a 16x16 grid
-  // We define groups for face/eyes/mouth/accessories
+  // Colors matching the user's mascot exactly
+  const body = "#5b6abf";
+  const bodyDark = "#4c59a8";
+  const bodyLight = "#6b7ad0";
+  const eyeColor = "#1a1a2e";
+  const mouthColor = "#4a4a80";
+
   return (
     <div
-      className={cn("relative inline-flex items-center justify-center", animation, className)}
+      className={cn(
+        "relative inline-flex items-center justify-center select-none",
+        bouncing && "animate-bounce-slow",
+        className
+      )}
       style={{ width: size, height: size }}
     >
       <svg
@@ -73,76 +106,123 @@ export default function PixelMascot({ phase = "idle", className, size = 32 }: Pi
         shapeRendering="crispEdges"
         xmlns="http://www.w3.org/2000/svg"
       >
-        {/* Shadow */}
-        <path d="M4,15 h8 v1 h-8 z" fill="#000000" opacity="0.4" />
+        {/* ══ MAIN BODY/HEAD BLOCK ══ */}
+        {/* Core rectangle: columns 3-12, rows 3-10 */}
+        <rect x="3" y="3" width="10" height="8" fill={body} />
 
-        {/* Body (Screen / Robot Face) */}
-        {/* Outer border */}
-        <path d="M3,3 h10 v1 h1 v8 h-1 v1 h-10 v-1 h-1 v-8 h1 z" fill="#182e4c" />
-        <path d="M4,4 h8 v8 h-8 z" fill="#0a1324" />
-        
-        {/* Highlight inner frame */}
-        <path d="M4,4 h8 v1 h-8 z M4,4 v8 h1 v-8 z" fill="#3b5b7b" opacity="0.5" />
+        {/* ══ EAR BUMPS ══ */}
+        {/* Left ear: cols 3-4, rows 1-2 */}
+        <rect x="3" y="1" width="2" height="2" fill={body} />
+        {/* Right ear: cols 11-12, rows 1-2 */}
+        <rect x="11" y="1" width="2" height="2" fill={body} />
 
-        {/* EYES based on expression */}
-        {expression === "smile" && (
-          <path d="M5,6 h2 v2 h-2 z M9,6 h2 v2 h-2 z" fill="#5b8bb8" />
+        {/* ══ SIDE ARM BUMPS ══ */}
+        {/* Left arm: col 2, rows 5-7 */}
+        <rect x="2" y="5" width="1" height="3" fill={body} />
+        {/* Right arm: col 13, rows 5-7 */}
+        <rect x="13" y="5" width="1" height="3" fill={body} />
+
+        {/* ══ FOUR LEGS ══ */}
+        {/* Left-outer leg: cols 4-5, rows 11-13 */}
+        <rect x="4" y="11" width="1" height="3" fill={body} />
+        {/* Left-inner leg: cols 6-7, rows 11-12 */}
+        <rect x="6" y="11" width="1" height="3" fill={body} />
+        {/* Right-inner leg: cols 9-10, rows 11-12 */}
+        <rect x="9" y="11" width="1" height="3" fill={body} />
+        {/* Right-outer leg: cols 11-12, rows 11-13 */}
+        <rect x="11" y="11" width="1" height="3" fill={body} />
+
+        {/* ══ SHADING ══ */}
+        {/* Top highlight */}
+        <rect x="4" y="3" width="8" height="1" fill={bodyLight} opacity="0.3" />
+        {/* Bottom shadow */}
+        <rect x="3" y="10" width="10" height="1" fill={bodyDark} />
+
+        {/* ══ EYES ══ */}
+        {eyeStyle === "normal" && (
+          <>
+            {/* Left eye: 2x2 at cols 5-6, rows 5-6 */}
+            <rect x="5" y="5" width="2" height="2" fill={eyeColor} />
+            {/* Right eye: 2x2 at cols 9-10, rows 5-6 */}
+            <rect x="9" y="5" width="2" height="2" fill={eyeColor} />
+          </>
         )}
-        
-        {expression === "happy" && (
-          <path d="M5,6 h2 v1 h-2 z M5,7 h1 v1 h-1 z  M9,6 h2 v1 h-2 z M10,7 h1 v1 h-1 z" fill="#5b8bb8" />
+        {eyeStyle === "happy" && (
+          <>
+            {/* Happy U-shape eyes */}
+            <rect x="5" y="5" width="1" height="2" fill={eyeColor} />
+            <rect x="6" y="6" width="1" height="1" fill={eyeColor} />
+            <rect x="9" y="6" width="1" height="1" fill={eyeColor} />
+            <rect x="10" y="5" width="1" height="2" fill={eyeColor} />
+          </>
+        )}
+        {eyeStyle === "thinking" && (
+          <>
+            {/* Left eye raised, right eye lower */}
+            <rect x="5" y="4" width="2" height="2" fill={eyeColor} />
+            <rect x="9" y="6" width="2" height="1" fill={eyeColor} />
+          </>
+        )}
+        {eyeStyle === "wide" && (
+          <>
+            {/* Bigger 2x3 eyes with shine */}
+            <rect x="5" y="4" width="2" height="3" fill={eyeColor} />
+            <rect x="5" y="4" width="1" height="1" fill="#ffffff" opacity="0.4" />
+            <rect x="9" y="4" width="2" height="3" fill={eyeColor} />
+            <rect x="9" y="4" width="1" height="1" fill="#ffffff" opacity="0.4" />
+          </>
+        )}
+        {eyeStyle === "determined" && (
+          <>
+            {/* Flat-top brow line over eyes */}
+            <rect x="4" y="4" width="3" height="1" fill={bodyDark} />
+            <rect x="5" y="5" width="2" height="2" fill={eyeColor} />
+            <rect x="9" y="4" width="3" height="1" fill={bodyDark} />
+            <rect x="9" y="5" width="2" height="2" fill={eyeColor} />
+          </>
+        )}
+        {eyeStyle === "wink" && (
+          <>
+            {/* Left eye normal, right eye winking (line) */}
+            <rect x="5" y="5" width="2" height="2" fill={eyeColor} />
+            <rect x="9" y="6" width="2" height="1" fill={eyeColor} />
+          </>
         )}
 
-        {expression === "thinking" && (
-          <path d="M5,5 h2 v2 h-2 z M9,6 h2 v2 h-2 z" fill="#5b8bb8" />
+        {/* ══ MOUTH ══ */}
+        {mouthStyle === "neutral" && (
+          <rect x="7" y="8" width="2" height="1" fill={mouthColor} />
+        )}
+        {mouthStyle === "smile" && (
+          <>
+            <rect x="6" y="8" width="4" height="1" fill={mouthColor} />
+            <rect x="7" y="9" width="2" height="1" fill={mouthColor} />
+          </>
+        )}
+        {mouthStyle === "open" && (
+          <rect x="7" y="8" width="2" height="2" fill={mouthColor} />
+        )}
+        {mouthStyle === "dash" && (
+          <rect x="7" y="8" width="2" height="1" fill={mouthColor} />
         )}
 
-        {expression === "focused" && (
-          <path d="M5,7 h2 v1 h-2 z M9,7 h2 v1 h-2 z" fill="#5b8bb8" />
+        {/* ══ ACCESSORIES ══ */}
+        {/* Hard hat for coding phases */}
+        {showHat && (
+          <>
+            <rect x="3" y="0" width="10" height="2" fill="#fbbf24" />
+            <rect x="6" y="-1" width="4" height="1" fill="#f59e0b" />
+          </>
         )}
 
-        {expression === "squint" && (
-          <path d="M5,6 h2 v1 h-2 z M9,7 h2 v1 h-2 z" fill="#f87171" />
-        )}
-
-        {expression === "wide" && (
-          <path d="M5,5 h2 v3 h-2 z M9,5 h2 v3 h-2 z M6,6 h1 v1 h-1 z M10,6 h1 v1 h-1 z" fill="#5b8bb8" />
-        )}
-
-        {expression === "excited" && (
-          <path d="M5,6 h2 v2 h-2 z M9,6 h2 v2 h-2 z" fill="#facc15" />
-        )}
-
-        {/* MOUTH based on expression */}
-        {(expression === "smile" || expression === "happy") && (
-          <path d="M6,10 h4 v1 h-4 z" fill="#5b8bb8" opacity="0.8" />
-        )}
-        {(expression === "excited" || expression === "wide") && (
-          <path d="M6,9 h4 v2 h-4 z" fill="#facc15" opacity="0.8" />
-        )}
-        {expression === "thinking" && (
-          <path d="M7,10 h2 v1 h-2 z" fill="#5b8bb8" opacity="0.7" />
-        )}
-        {expression === "focused" && (
-          <path d="M6,10 h4 v1 h-4 z" fill="#5b8bb8" opacity="0.5" />
-        )}
-        {expression === "squint" && (
-          <path d="M6,10 h3 v1 h-3 z M9,9 h1 v1 h-1 z" fill="#f87171" opacity="0.8" />
-        )}
-
-        {/* ACCESSORIES */}
-        {accessory === "magnifier" && (
-          <path d="M9,4 h3 v3 h-3 z M10,5 h1 v1 h-1 z M11,6 h1 v1 h-1 z M12,7 h1 v1 h-1 z M13,8 h1 v1 h-1 z" fill="#9ca3af" />
-        )}
-        {accessory === "keyboard" && (
-          // Tiny keyboard prop overlay at bottom
-          <path d="M3,12 h10 v2 h-10 z M4,12 h1 v1 h-1 z M6,12 h1 v1 h-1 z M8,12 h1 v1 h-1 z M10,12 h1 v1 h-1 z M12,12 h1 v1 h-1 z M5,13 h4 v1 h-4 z M10,13 h2 v1 h-2 z" fill="#cbd5e1" opacity="0.9" />
-        )}
-        {accessory === "monocle" && (
-          <path d="M8,4 h4 v4 h-4 z M9,5 h2 v2 h-2 z M11,7 h1 v1 h-1 z" fill="#fbbf24" opacity="0.9" />
-        )}
-        {accessory === "bug" && (
-          <path d="M3,3 h2 v2 h-2 z M4,4 h1 v1 h-1 z M11,3 h2 v2 h-2 z" fill="#ef4444" opacity="0.8" />
+        {/* Sparks for executing/debugging */}
+        {showSparks && (
+          <>
+            <rect x="1" y="3" width="1" height="1" fill="#facc15" opacity="0.9" />
+            <rect x="14" y="2" width="1" height="1" fill="#facc15" opacity="0.7" />
+            <rect x="0" y="6" width="1" height="1" fill="#facc15" opacity="0.5" />
+            <rect x="15" y="5" width="1" height="1" fill="#facc15" opacity="0.8" />
+          </>
         )}
       </svg>
     </div>
