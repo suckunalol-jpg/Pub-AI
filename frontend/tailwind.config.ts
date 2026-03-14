@@ -9,21 +9,21 @@ const config: Config = {
     extend: {
       colors: {
         navy: {
-          950: "#0a0a1a",
-          900: "#0d1b2a",
-          800: "#1b2838",
-          700: "#1f3044",
-          600: "#264060",
+          950: "#000000", // pure black base
+          900: "#020813",
+          800: "#0a1324",
+          700: "#112038",
+          600: "#182e4c",
         },
         accent: {
-          DEFAULT: "#00aaff",
-          dark: "#0066ff",
-          glow: "#00aaff40",
+          DEFAULT: "#5b8bb8", // darkish pastel blue
+          dark: "#4a759c",
+          glow: "#5b8bb840",
         },
         glass: {
-          DEFAULT: "rgba(255, 255, 255, 0.05)",
-          light: "rgba(255, 255, 255, 0.1)",
-          border: "rgba(255, 255, 255, 0.1)",
+          DEFAULT: "rgba(91, 139, 184, 0.05)",
+          light: "rgba(91, 139, 184, 0.1)",
+          border: "rgba(91, 139, 184, 0.3)",
         },
       },
       backdropBlur: {
@@ -48,8 +48,8 @@ const config: Config = {
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
         pulseGlow: {
-          "0%, 100%": { boxShadow: "0 0 5px #00aaff20" },
-          "50%": { boxShadow: "0 0 20px #00aaff40" },
+          "0%, 100%": { boxShadow: "0 0 5px #5b8bb820" },
+          "50%": { boxShadow: "0 0 20px #5b8bb840" },
         },
         terminalBlink: {
           "0%, 100%": { opacity: "1" },

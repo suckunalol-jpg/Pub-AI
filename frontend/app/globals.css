@@ -11,27 +11,12 @@
    ============================= */
 
 :root,
-[data-theme="default"] {
-  --bg-primary: #0a0a1a;
-  --bg-secondary: #0d1b2a;
-  --accent: #00aaff;
-  --accent-dark: #0066ff;
-  --glass-bg: rgba(255, 255, 255, 0.05);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --msg-user-bg: rgba(0, 170, 255, 0.12);
-  --msg-user-border: rgba(0, 170, 255, 0.2);
-  --msg-ai-bg: rgba(255, 255, 255, 0.04);
-  --msg-ai-border: rgba(255, 255, 255, 0.08);
-  --text-primary: #ffffff;
-  --text-secondary: #9ca3af;
-  --font-body: 'Inter', sans-serif;
-}
-
+[data-theme="default"],
 [data-theme="terminal"] {
-  --bg-primary: #000a20;
+  --bg-primary: #000000;
   --bg-secondary: transparent;
-  --accent: #3b82f6;
-  --accent-dark: #2563eb;
+  --accent: #5b8bb8;
+  --accent-dark: #4a759c;
   --glass-bg: transparent;
   --glass-border: transparent;
   --msg-user-bg: transparent;
@@ -41,22 +26,6 @@
   --text-primary: #c8d6e5;
   --text-secondary: #5b7a95;
   --font-body: 'Fira Code', 'Cascadia Code', monospace;
-}
-
-[data-theme="midnight"] {
-  --bg-primary: #000000;
-  --bg-secondary: rgba(0, 0, 0, 0.5);
-  --accent: #60a5fa;
-  --accent-dark: #3b82f6;
-  --glass-bg: rgba(0, 0, 0, 0.4);
-  --glass-border: rgba(255, 255, 255, 0.8);
-  --msg-user-bg: transparent;
-  --msg-user-border: rgba(255, 255, 255, 0.8);
-  --msg-ai-bg: transparent;
-  --msg-ai-border: rgba(255, 255, 255, 0.3);
-  --text-primary: #ffffff;
-  --text-secondary: #9ca3af;
-  --font-body: 'Inter', sans-serif;
 }
 
 [data-theme="mizzy"] {

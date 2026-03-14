@@ -8,12 +8,11 @@ import ChatInputBar from "./ChatInputBar";
 import ActionIndicator, { type AiPhase, type ActionEntry } from "./ActionIndicator";
 import { generateId } from "@/lib/utils";
 import * as api from "@/lib/api";
-import type { ToolCallEvent, ToolResultEvent } from "@/lib/api";
 import { useThemeStore } from "@/lib/themeStore";
 import { useEffortStore, type EffortLevel } from "@/lib/effortStore";
 import AgentCreatorModal from "./AgentCreatorModal";
+import IDEPanel from "./IDEPanel";
 
-// Phase-to-summary mapping for action entries
 const phaseSummaries: Record<AiPhase, string> = {
   thinking: "Thinking...",
   analyzing: "Analyzing your request...",
@@ -33,7 +32,6 @@ const phaseSummaries: Record<AiPhase, string> = {
   formatting: "Formatting response...",
 };
 
-// Tool-name-to-friendly-label mapping
 const toolLabels: Record<string, string> = {
   web_search: "🔍 Searching the web",
   web_fetch: "🌐 Fetching webpage",
@@ -54,7 +52,6 @@ const toolLabels: Record<string, string> = {
   roblox_scan: "🎮 Scanning Roblox scripts",
   http_request: "🌐 HTTP request",
   plan_tasks: "📋 Planning tasks",
-  // Agent Zero tools
   code_execution: "💻 Executing code",
   memory_save: "💾 Saving to memory",
   memory_load: "🧠 Recalling memory",
@@ -85,7 +82,6 @@ const defaultAgentState: AgentState = {
   status: "idle"
 };
 
-// Memoize ChatMessage for the messages list
 const MemoizedChatMessage = memo(ChatMessage);
 
 export default function ChatInterface() {
@@ -94,21 +90,19 @@ export default function ChatInterface() {
   
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const theme = useThemeStore((s) => s.theme);
-
+  const [username, setUsername] = useState<string>("user");
+  
   const [showAgentCreator, setShowAgentCreator] = useState(false);
   const effortLevel = useEffortStore((s) => s.effort);
   const setEffortLevel = useEffortStore((s) => s.setEffort);
-  const [agentMode, setAgentMode] = useState(false);  // Agent Zero engine mode
+  const [agentMode, setAgentMode] = useState(false);
+  const [showIDE, setShowIDE] = useState(false);
   
   const abortRef = useRef<AbortController | null>(null);
   const sendRef = useRef<(text: string) => void>(() => { });
-  const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastScrollRef = useRef(0);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Derived state for the active tab
   const activeState = agentStates[activeTab] || defaultAgentState;
   const messages = activeState.messages;
   const streamingContent = activeState.streamingContent;
@@ -117,7 +111,12 @@ export default function ChatInterface() {
   const aiPhase = activeState.aiPhase;
   const showActions = activeState.showActions;
 
-  // Helper to update a specific agent's state
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setUsername(localStorage.getItem("pub_username") || "user");
+    }
+  }, []);
+
   const updateAgentState = useCallback((agentName: string, updater: (prev: AgentState) => Partial<AgentState>) => {
     setAgentStates((prev) => {
       const current = prev[agentName] || { ...defaultAgentState };
@@ -125,7 +124,6 @@ export default function ChatInterface() {
     });
   }, []);
 
-  // Throttled auto-scroll: only scroll every 300ms during streaming to prevent shaking
   useEffect(() => {
     const now = Date.now();
     if (isLoading) {
@@ -138,17 +136,30 @@ export default function ChatInterface() {
     }
   }, [messages, streamingContent, isLoading, activeTab]);
 
-  // Cleanup abort controller on unmount
   useEffect(() => {
-    return () => {
-      abortRef.current?.abort();
-    };
+    return () => abortRef.current?.abort();
   }, []);
+
+  // Check file count to auto-trigger IDE
+  const checkProjectSize = useCallback(async () => {
+    try {
+      const files = await api.ideListFiles("");
+      if (files.length > 5) {
+        setShowIDE(true);
+      }
+    } catch {
+      // ignore errors
+    }
+  }, []);
+
+  // Check initially
+  useEffect(() => {
+    checkProjectSize();
+  }, [checkProjectSize]);
 
   const handleNewChat = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
-    
     setAgentStates({ "Main Agent": { ...defaultAgentState } });
     setActiveTab("Main Agent");
     setConversationId(null);
@@ -157,8 +168,6 @@ export default function ChatInterface() {
 
   const handleSlashCommand = useCallback(
     (command: string, args: string) => {
-      const setTheme = useThemeStore.getState().setTheme;
-
       switch (command) {
         case "clear":
           updateAgentState(activeTab, () => ({ ...defaultAgentState }));
@@ -166,21 +175,6 @@ export default function ChatInterface() {
         case "new":
           handleNewChat();
           break;
-        case "theme": {
-          const t = args.trim().toLowerCase();
-          if (["default", "terminal", "midnight", "mizzy"].includes(t)) {
-            setTheme(t as "default" | "terminal" | "midnight" | "mizzy");
-          } else {
-            const infoMsg: Message = {
-              id: generateId(),
-              role: "assistant",
-              content: `Available themes: **default**, **terminal**, **midnight**, **mizzy**.\nUsage: \`/theme terminal\``,
-              timestamp: new Date(),
-            };
-            updateAgentState(activeTab, (prev) => ({ messages: [...prev.messages, infoMsg] }));
-          }
-          break;
-        }
         case "agents":
           setShowAgentCreator(true);
           break;
@@ -189,7 +183,7 @@ export default function ChatInterface() {
           const modeMsg: Message = {
             id: generateId(),
             role: "assistant",
-            content: `🤖 Agent mode **${!agentMode ? "ON" : "OFF"}**. ${!agentMode ? "Using Agent Zero engine with tool calling, memory, web search, code execution, and multi-agent delegation." : "Switched back to standard chat."}`,
+            content: `🤖 Agent mode **${!agentMode ? "ON" : "OFF"}**.`,
             timestamp: new Date(),
           };
           updateAgentState(activeTab, (prev) => ({ messages: [...prev.messages, modeMsg] }));
@@ -199,74 +193,19 @@ export default function ChatInterface() {
           const level = args.trim().toLowerCase();
           if (["low", "medium", "high", "max"].includes(level)) {
             setEffortLevel(level as EffortLevel);
-            const emojiMap: Record<string, string> = { low: "⚡", medium: "⚖️", high: "🧠", max: "🔬" };
-            const infoMsg: Message = {
-              id: generateId(),
-              role: "assistant",
-              content: `${emojiMap[level]} Effort level set to **${level}**`,
-              timestamp: new Date(),
-            };
-            updateAgentState(activeTab, (prev) => ({ messages: [...prev.messages, infoMsg] }));
-          } else {
-            const infoMsg: Message = {
-              id: generateId(),
-              role: "assistant",
-              content: `Available effort levels:\n- ⚡ **low** — minimal thinking, fastest\n- ⚖️ **medium** — balanced\n- 🧠 **high** — deep reasoning (default)\n- 🔬 **max** — maximum deliberation\n\nUsage: \`/effort high\`\n\nCurrent: **${effortLevel}**`,
-              timestamp: new Date(),
-            };
-            updateAgentState(activeTab, (prev) => ({ messages: [...prev.messages, infoMsg] }));
           }
           break;
         }
-        case "help": {
-          const helpMsg: Message = {
-            id: generateId(),
-            role: "assistant",
-            content: [
-              "## Available Commands",
-              "",
-              "| Command | Description |",
-              "|---------|-------------|",
-              "| `/clear` | Clear the current chat |",
-              "| `/new` | Start a new conversation |",
-              "| `/agents` | Create or manage AI agents |",
-              "| `/agent` | Toggle Agent Zero engine mode (tools, memory, code exec) |",
-              "| `/effort <level>` | Set reasoning effort (low/medium/high/max) |",
-              "| `/theme <name>` | Switch theme |",
-              "| `/help` | Show this help |",
-              "| `/export` | Export chat as markdown |",
-            ].join("\n"),
-            timestamp: new Date(),
-          };
-          updateAgentState(activeTab, (prev) => ({ messages: [...prev.messages, helpMsg] }));
-          break;
-        }
-        case "export": {
-          const md = messages
-            .map((m) => `**${m.role === "user" ? "You" : "AI"}**: ${m.content}`)
-            .join("\n\n---\n\n");
-          const blob = new Blob([md], { type: "text/markdown" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `chat-export-${Date.now()}.md`;
-          a.click();
-          URL.revokeObjectURL(url);
-          break;
-        }
         default:
-          // Unknown command — send it as a normal message to the AI
           sendRef.current(`/${command} ${args}`.trim());
       }
     },
-    [handleNewChat, messages, activeTab, updateAgentState, agentMode]
+    [handleNewChat, activeTab, updateAgentState, agentMode, setEffortLevel]
   );
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
-
-    // Finalize whatever content was streamed so far for all running agents
     setAgentStates((prev) => {
       const next = { ...prev };
       for (const [agentName, state] of Object.entries(next)) {
@@ -274,7 +213,7 @@ export default function ChatInterface() {
           const finalMsg: Message = {
             id: generateId(),
             role: "assistant",
-            content: state.streamingContent + (state.streamingContent.trim() ? "\n\n*(generation stopped)*" : "*(generation stopped)*"),
+            content: state.streamingContent + " *(stopped)*",
             timestamp: new Date(),
           };
           next[agentName] = {
@@ -290,7 +229,6 @@ export default function ChatInterface() {
       }
       return next;
     });
-
     setIsLoading(false);
   }, []);
 
@@ -298,14 +236,7 @@ export default function ChatInterface() {
     async (text: string, attachments?: any[]) => {
       if ((!text.trim() && (!attachments || attachments.length === 0)) || isLoading) return;
 
-      const userMessage: Message = {
-        id: generateId(),
-        role: "user",
-        content: text,
-        timestamp: new Date(),
-      };
-
-      // Set running state for the targeted agent tab
+      const userMessage: Message = { id: generateId(), role: "user", content: text, timestamp: new Date() };
       const targetAgent = activeTab;
       
       updateAgentState(targetAgent, (prev) => ({
@@ -315,62 +246,29 @@ export default function ChatInterface() {
         liveCode: "",
         showActions: true,
         status: "running",
-        actions: [{
-          id: generateId(),
-          phase: "thinking",
-          summary: phaseSummaries.thinking,
-          timestamp: new Date(),
-        }]
+        actions: [{ id: generateId(), phase: "thinking", summary: phaseSummaries.thinking, timestamp: new Date() }]
       }));
 
       setIsLoading(true);
 
-      // We maintain accumulated content per agent in this local object
       const accumulatedContent: Record<string, string> = {};
       const actionTimers: Record<string, ReturnType<typeof setTimeout>> = {};
-
       const streamFn = agentMode ? api.streamAgentEngine : api.streamMessage;
       
       const controller = streamFn(conversationId, text, {
         onStatus(phase, convId, streamAgentName = "Main Agent") {
           if (convId) setConversationId(convId);
-
           updateAgentState(streamAgentName, (prev) => {
             const newActions = [...prev.actions];
-            // Avoid duplicate consecutive phases
             if (newActions.length === 0 || newActions[newActions.length - 1].phase !== phase) {
-               newActions.push({
-                id: generateId(),
-                phase,
-                summary: phaseSummaries[phase] || phase,
-                timestamp: new Date(),
-              });
+               newActions.push({ id: generateId(), phase, summary: phaseSummaries[phase] || phase, timestamp: new Date() });
             }
-            return {
-              aiPhase: phase,
-              actions: newActions,
-              status: "running"
-            };
+            return { aiPhase: phase, actions: newActions, status: "running" };
           });
         },
         onToken(content, streamAgentName = "Main Agent") {
           accumulatedContent[streamAgentName] = (accumulatedContent[streamAgentName] || "") + content;
-          
-          updateAgentState(streamAgentName, (prev) => {
-            const newActions = [...prev.actions];
-            if (newActions.length > 0) {
-              const last = { ...newActions[newActions.length - 1] };
-              if (last.phase === "coding" || last.phase === "thinking") {
-                last.details = accumulatedContent[streamAgentName].slice(-500);
-                newActions[newActions.length - 1] = last;
-              }
-            }
-            return {
-              streamingContent: accumulatedContent[streamAgentName],
-              actions: newActions,
-              status: "running"
-            };
-          });
+          updateAgentState(streamAgentName, (prev) => ({ streamingContent: accumulatedContent[streamAgentName], status: "running" }));
         },
         onCode(language, content, streamAgentName = "Main Agent") {
           updateAgentState(streamAgentName, () => ({ liveCode: content }));
@@ -378,99 +276,57 @@ export default function ChatInterface() {
         onToolCall(event) {
           const streamAgentName = event.agentName || "Main Agent";
           const label = toolLabels[event.tool] || `🔧 ${event.tool}`;
-          
           updateAgentState(streamAgentName, (prev) => ({
             aiPhase: "calling_tool",
             status: "running",
-            actions: [
-              ...prev.actions,
-              {
-                id: generateId(),
-                phase: "calling_tool" as AiPhase,
-                summary: `${label}`,
-                details: JSON.stringify(event.params, null, 2).slice(0, 300),
-                timestamp: new Date(),
-              }
-            ]
+            actions: [...prev.actions, { id: generateId(), phase: "calling_tool", summary: label, details: JSON.stringify(event.params).slice(0, 100), timestamp: new Date() }]
           }));
         },
         onToolResult(event) {
           const streamAgentName = event.agentName || "Main Agent";
-          
           updateAgentState(streamAgentName, (prev) => {
             if (prev.actions.length === 0) return prev;
             const newActions = [...prev.actions];
             const last = { ...newActions[newActions.length - 1] };
-            const statusEmoji = event.success ? "✅" : "❌";
-            last.summary = `${statusEmoji} ${toolLabels[event.tool] || event.tool} — ${event.success ? "done" : "failed"}`;
-            last.details = event.output.slice(0, 500);
+            last.summary = `${event.success ? "✅" : "❌"} ${toolLabels[event.tool] || event.tool}`;
             newActions[newActions.length - 1] = last;
             return { actions: newActions };
           });
         },
         onDone(messageId, _model, convId, _latencyMs, streamAgentName = "Main Agent") {
           if (convId) setConversationId(convId);
-          
           const text = accumulatedContent[streamAgentName] || "";
-          
           updateAgentState(streamAgentName, (prev) => ({
             messages: [...prev.messages, { id: messageId, role: "assistant", content: text, timestamp: new Date() }],
-            streamingContent: "",
-            liveCode: "",
-            status: "done",
-            aiPhase: "thinking"
+            streamingContent: "", liveCode: "", status: "done", aiPhase: "thinking"
           }));
-          
-          // Clear actions after 1.5s
           if (actionTimers[streamAgentName]) clearTimeout(actionTimers[streamAgentName]);
-          actionTimers[streamAgentName] = setTimeout(() => {
-            updateAgentState(streamAgentName, () => ({ showActions: false, actions: [] }));
-          }, 1500);
-          
-          // Only the target agent finishing marks overall loading as false
-          if (streamAgentName === targetAgent) {
-             setIsLoading(false);
-             abortRef.current = null;
+          actionTimers[streamAgentName] = setTimeout(() => updateAgentState(streamAgentName, () => ({ showActions: false, actions: [] })), 1500);
+          if (streamAgentName === targetAgent) { 
+            setIsLoading(false); 
+            abortRef.current = null; 
+            checkProjectSize();
           }
         },
         onAgentDone(streamAgentName) {
            const text = accumulatedContent[streamAgentName] || "";
-           
            updateAgentState(streamAgentName, (prev) => ({
              messages: [...prev.messages, { id: generateId(), role: "assistant", content: text, timestamp: new Date() }],
-             streamingContent: "",
-             liveCode: "",
-             status: "done",
-             aiPhase: "thinking"
+             streamingContent: "", liveCode: "", status: "done", aiPhase: "thinking"
            }));
-           
            if (actionTimers[streamAgentName]) clearTimeout(actionTimers[streamAgentName]);
-           actionTimers[streamAgentName] = setTimeout(() => {
-             updateAgentState(streamAgentName, () => ({ showActions: false, actions: [] }));
-           }, 1500);
+           actionTimers[streamAgentName] = setTimeout(() => updateAgentState(streamAgentName, () => ({ showActions: false, actions: [] })), 1500);
+           checkProjectSize();
         },
         onError(detail, streamAgentName = "Main Agent") {
           const text = accumulatedContent[streamAgentName] || "";
-          
           updateAgentState(streamAgentName, (prev) => {
             let errorMsgs = [];
-            if (text.trim()) {
-              errorMsgs.push({ id: generateId(), role: "assistant", content: text, timestamp: new Date() } as Message);
-            }
-            errorMsgs.push({ id: generateId(), role: "assistant", content: `Sorry, an error occurred: ${detail}`, timestamp: new Date() } as Message);
-            
-            return {
-              messages: [...prev.messages, ...errorMsgs],
-              streamingContent: "",
-              liveCode: "",
-              status: "error"
-            };
+            if (text.trim()) errorMsgs.push({ id: generateId(), role: "assistant", content: text, timestamp: new Date() } as Message);
+            errorMsgs.push({ id: generateId(), role: "assistant", content: `Error: ${detail}`, timestamp: new Date() } as Message);
+            return { messages: [...prev.messages, ...errorMsgs], streamingContent: "", liveCode: "", status: "error" };
           });
-
-          if (streamAgentName === targetAgent) {
-             setIsLoading(false);
-             abortRef.current = null;
-          }
+          if (streamAgentName === targetAgent) { setIsLoading(false); abortRef.current = null; }
         }
       }, targetAgent, attachments);
 
@@ -479,132 +335,157 @@ export default function ChatInterface() {
     [conversationId, isLoading, activeTab, updateAgentState, agentMode]
   );
 
-  // Keep sendRef in sync with handleSend for slash command forwarding
   sendRef.current = handleSend;
+  
   const handleFeedback = async (messageId: string, rating: 1 | 2) => {
-    try {
-      await api.sendFeedback(messageId, rating);
-    } catch {
-      // Feedback is non-critical
-    }
+    try { await api.sendFeedback(messageId, rating); } catch {}
   };
 
   return (
-    <div className="flex flex-col h-full relative">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold text-white">Chat</h2>
-          {agentMode && (
-            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
-              <Zap size={10} className="fill-blue-400" /> Agent Mode
-            </span>
-          )}
-        </div>
-        <button
-          onClick={handleNewChat}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-400 hover:text-white glass-button"
-        >
-          <Plus size={16} />
-          New Chat
-        </button>
-      </div>
+    <div className="flex flex-col h-full relative font-mono text-sm">
 
-      {/* Agent Tabs (Shown only when there are multiple agents) */}
-      {Object.keys(agentStates).length > 1 && (
-        <div className="flex items-center gap-1 px-4 py-2 bg-[#0A0A0A] border-b border-white/5 overflow-x-auto hide-scrollbar">
+      {/* Agent Tabs */}
+      <div className="flex items-center justify-between px-4 py-1.5 bg-[#020813] border-b border-accent/20 shrink-0">
+        <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar">
           {Object.keys(agentStates).map((agentName) => (
             <button
               key={agentName}
               onClick={() => setActiveTab(agentName)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm whitespace-nowrap transition-colors ${
+              className={`flex items-center gap-2 px-3 py-1 rounded-sm text-xs whitespace-nowrap transition-colors ${
                 activeTab === agentName
-                  ? "bg-white/10 text-white font-medium"
-                  : "text-gray-400 hover:text-white hover:bg-white/5"
+                  ? "bg-accent/20 text-accent font-bold border border-accent/30"
+                  : "text-gray-500 hover:text-accent hover:bg-accent/5 border border-transparent"
               }`}
             >
-              <Bot size={14} className={activeTab === agentName ? "text-blue-400" : "text-gray-500"} />
+              <Bot size={12} className={activeTab === agentName ? "text-accent" : "text-gray-600"} />
               {agentName}
-              {agentStates[agentName].status === "running" && (
-                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-              )}
             </button>
           ))}
         </div>
-      )}
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto py-4">
-        {messages.length === 0 && !isLoading && (
-          theme === "terminal" ? (
-            <div className="flex h-full items-center justify-center">
-              <div className="flex flex-col items-center gap-4">
-                <div className="text-4xl text-blue-500 terminal-avatar-bounce">
-                  {/* Claude Code style avatar (a simple expressive face or bot icon) */}
-                  <Bot size={48} className="text-blue-500 opacity-90" />
-                </div>
-                <div className="font-arcade text-3xl text-blue-500 terminal-avatar-blink" style={{ textShadow: "0 0 20px rgba(59, 130, 246, 0.5)" }}>
-                  Pub++
-                </div>
-                <div className="text-blue-400/60 font-mono text-xs mt-2">
-                  Type /help for commands
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center px-4">
-              <div className="font-arcade text-2xl text-white mb-3" style={{ textShadow: "0 0 15px rgba(255,255,255,0.2)" }}>
-                Pub++
-              </div>
-              <p className="text-gray-500 text-sm max-w-md">
-                Start a conversation. Ask questions, write code, build projects.
-              </p>
-            </div>
-          )
-        )}
-
-        <AnimatePresence>
-          {messages.map((msg) => (
-            <MemoizedChatMessage key={msg.id} message={msg} onFeedback={handleFeedback} />
-          ))}
-        </AnimatePresence>
-
-        {/* Streaming: show live content as it arrives */}
-        {isLoading && streamingContent && (
-          <ChatMessage
-            key="streaming"
-            message={{
-              id: "streaming",
-              role: "assistant",
-              content: streamingContent,
-              timestamp: new Date(),
-            }}
-            isStreaming
-          />
-        )}
-
-        {/* Action indicator: shows current phase with timeline */}
-        <AnimatePresence>
-          {showActions && actions.length > 0 && (
-            <ActionIndicator
-              phase={aiPhase}
-              actions={actions}
-              liveCode={liveCode}
-            />
+        <div className="flex items-center gap-3">
+          {showIDE && (
+            <span className="text-xs text-accent/60 bg-accent/10 px-2 py-0.5 rounded-sm border border-accent/20">
+              IDE Active ({">"}5 Files)
+            </span>
           )}
-        </AnimatePresence>
-
-        <div ref={messagesEndRef} />
+          <button onClick={handleNewChat} className="text-gray-500 hover:text-accent p-1 text-xs uppercase tracking-widest flex items-center gap-1 transition-colors">
+            <Plus size={12} /> New Thread
+          </button>
+        </div>
       </div>
 
-      {/* Input bar -- extracted component to prevent re-renders on typing */}
-      <ChatInputBar onSend={handleSend} onStop={handleStop} onSlashCommand={handleSlashCommand} isLoading={isLoading} />
+      <div className="flex-1 overflow-hidden flex">
+        {/* Main Chat Area */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Messages / Terminal Area */}
+          <div className="flex-1 overflow-y-auto py-4 px-2">
+        {messages.length === 0 && !isLoading && (
+          <div className="h-full flex flex-col justify-center px-8 lg:px-20 animate-fade-in relative max-w-5xl mx-auto">
+            
+            {/* Claude-Code styled Zero State */}
+            <div className="text-accent/80 text-xs mb-8 flex items-center gap-3 relative before:content-[''] before:absolute before:left-0 before:top-1/2 before:w-16 before:h-px before:bg-accent/40 pl-20 uppercase tracking-widest">
+              <span>Claude Code v2.1.72</span>
+              <span className="w-16 h-px bg-accent/40" />
+            </div>
 
-      {/* Agent Creator Modal — triggered by /agents slash command */}
-      <AgentCreatorModal
-        open={showAgentCreator}
-        onClose={() => setShowAgentCreator(false)}
-      />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border border-accent/40 rounded-sm">
+              
+              {/* Left Pane: Mascot and Welcome */}
+              <div className="p-8 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-accent/20 relative">
+                <div className="text-accent font-bold mb-8 text-center text-lg">Welcome back {username}!</div>
+                <img src="/mascot.png" alt="Mascot" className="h-24 filter drop-shadow-[0_0_12px_rgba(91,139,184,0.7)] hover:scale-105 transition-transform duration-300" />
+                
+                <div className="mt-8 text-center space-y-1 text-xs text-gray-500">
+                  <div>Qwen 2.5 TPU with high effort · PubAI Pro</div>
+                  <div>suckunalol@gmail.com's Organization</div>
+                  <div className="text-accent/60 my-1 font-mono">C:\Users\{username}</div>
+                </div>
+              </div>
+
+              {/* Right Pane: Recent Activity & What's New */}
+              <div className="p-6 flex flex-col gap-6 bg-accent/5">
+                
+                <section>
+                  <h3 className="text-accent/80 font-bold mb-2 text-xs uppercase tracking-widest">Recent activity</h3>
+                  <div className="text-gray-400 text-xs space-y-1">
+                    <div className="flex items-center gap-2 hover:text-accent cursor-pointer transition-colors">
+                      <span className="text-gray-600">↳</span> No recent activity
+                    </div>
+                  </div>
+                </section>
+
+                <div className="h-px bg-accent/10 w-full" />
+
+                <section>
+                  <h3 className="text-accent/80 font-bold mb-2 text-xs uppercase tracking-widest">What's new</h3>
+                  <div className="text-gray-400 text-xs space-y-2 leading-relaxed">
+                    <div className="flex items-start gap-2">
+                      <span className="text-accent mt-0.5">•</span>
+                      <span>Added actionable suggestions to `/context` command — identifying areas for automation.</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-accent mt-0.5">•</span>
+                      <span>Added `autoMemoryDirectory` setting to configure a custom directory for saved contexts.</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-accent mt-0.5">•</span>
+                      <span>Fixed memory leak where streaming API response buffers were not garbage collected.</span>
+                    </div>
+                    <div className="mt-3 text-accent/60 italic hover:text-accent cursor-pointer transition-colors">
+                      /release-notes for more
+                    </div>
+                  </div>
+                </section>
+
+              </div>
+            </div>
+
+            <div className="mt-6 text-gray-500/80 text-xs flex justify-between items-center px-1">
+              <span>* Voice mode is now available · /voice to enable</span>
+              <span className="animate-pulse text-accent">_</span>
+            </div>
+          </div>
+        )}
+
+        <div className="max-w-4xl mx-auto px-4">
+          <AnimatePresence>
+            {messages.map((msg) => (
+              <MemoizedChatMessage key={msg.id} message={msg} onFeedback={handleFeedback} />
+            ))}
+          </AnimatePresence>
+
+          {isLoading && streamingContent && (
+            <ChatMessage
+              key="streaming"
+              message={{ id: "streaming", role: "assistant", content: streamingContent, timestamp: new Date() }}
+              isStreaming
+            />
+          )}
+
+          <AnimatePresence>
+            {showActions && actions.length > 0 && (
+              <ActionIndicator phase={aiPhase} actions={actions} liveCode={liveCode} />
+            )}
+          </AnimatePresence>
+
+          <div ref={messagesEndRef} className="h-4" />
+        </div>
+      </div>
+
+      {/* Terminal Input Bar */}
+      <ChatInputBar onSend={handleSend} onStop={handleStop} onSlashCommand={handleSlashCommand} isLoading={isLoading} />
+      </div>
+
+      {/* Conditional IDE Panel */}
+      {showIDE && (
+        <div className="w-[800px] border-l border-accent/30 shrink-0 hidden md:block">
+          <IDEPanel />
+        </div>
+      )}
+
+      </div>
+      
+      <AgentCreatorModal open={showAgentCreator} onClose={() => setShowAgentCreator(false)} />
     </div>
   );
 }

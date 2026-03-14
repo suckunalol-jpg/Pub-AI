@@ -297,103 +297,78 @@ export default function ChatInputBar({ onSend, onStop, onSlashCommand, isLoading
         </div>
       )}
 
-      {/* Input container logic based on theme */}
-      {theme === "terminal" ? (
-        <div className="flex items-end gap-2 px-6 py-2 border-t border-blue-500/20 bg-[#000a20] font-mono">
-          <span className="text-blue-500 mb-2 whitespace-nowrap">
-            user@pub-ai:~$
-          </span>
+      {/* Terminal Input Container */}
+      <div className="flex flex-col gap-2 px-4 py-3 border-t border-accent/20 bg-[#01040a] font-mono">
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => handleFileSelect(e.target.files)}
+          accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.pdf,.txt,.md,.csv,.json,.py,.js,.ts,.tsx,.jsx,.html,.css,.lua,.rs,.go,.java,.cpp,.c,.h"
+        />
+
+        <div className="flex items-end gap-2 text-sm">
+          {/* Prompt prefix */}
+          <div className="flex items-center gap-1.5 mb-1.5 text-accent whitespace-nowrap font-bold">
+            <span className="text-accent/60">&gt;</span>
+            <span className="flex items-center gap-1 text-xs">
+              pub-ai 
+              <span className="text-gray-500 font-normal">in</span> 
+              <span className="text-accent/80">~</span>
+            </span>
+            <span className="text-accent ml-1">$</span>
+          </div>
+
           <textarea
             ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type your command..."
+            placeholder="Type a command or message... (use / for actions)"
             rows={1}
-            className="flex-1 bg-transparent text-sm text-blue-100 placeholder-blue-800/50 resize-none outline-none max-h-40 mb-2 leading-relaxed"
+            className="flex-1 bg-transparent text-gray-200 placeholder-accent/20 resize-none outline-none max-h-40 mb-1.5 ml-2 leading-relaxed"
             spellCheck={false}
           />
-          {/* Mic button */}
-          <button
-            onClick={toggleListen}
-            className={`p-2 mb-1 transition-colors ${
-              isListening ? "text-red-500 animate-pulse" : "text-blue-500 hover:text-blue-400"
-            }`}
-            title={isListening ? "Stop listening" : "Start speaking"}
-          >
-            <Mic size={16} />
-          </button>
-          {isLoading ? (
-            <button onClick={onStop} className="p-2 mb-1 text-red-500 hover:text-red-400">
-              <Square size={16} />
+
+          <div className="flex items-center gap-1 mb-1 relative z-10">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="p-1.5 text-accent/50 hover:text-accent hover:bg-accent/10 rounded transition-colors disabled:opacity-30"
+              title="Attach context"
+            >
+              <Paperclip size={16} className={uploading ? "animate-spin" : ""} />
             </button>
-          ) : (
-            <button onClick={handleSubmit} disabled={!input.trim()} className="p-2 mb-1 text-blue-500 hover:text-blue-400 disabled:opacity-30">
-              <Send size={16} />
+            
+            <button
+              onClick={toggleListen}
+              className={`p-1.5 rounded transition-colors ${
+                isListening ? "text-red-400 bg-red-500/10 animate-pulse" : "text-accent/50 hover:text-accent hover:bg-accent/10"
+              }`}
+              title={isListening ? "Stop listening" : "Start speaking"}
+            >
+              <Mic size={16} />
             </button>
-          )}
+
+            {isLoading ? (
+              <button onClick={onStop} className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors">
+                <Square size={16} />
+              </button>
+            ) : (
+              <button 
+                onClick={handleSubmit} 
+                disabled={!input.trim() && attachments.length === 0} 
+                className="p-1.5 text-accent hover:text-accent/80 hover:bg-accent/10 rounded disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                title="Send"
+              >
+                <Send size={16} />
+              </button>
+            )}
+          </div>
         </div>
-      ) : (
-        <GlassCard className="flex items-end gap-3 px-4 py-3 mx-4 mb-2">
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => handleFileSelect(e.target.files)}
-            accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.pdf,.txt,.md,.csv,.json,.py,.js,.ts,.tsx,.jsx,.html,.css,.lua,.rs,.go,.java,.cpp,.c,.h"
-          />
-
-          {/* Attachment button */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="flex-shrink-0 p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 disabled:opacity-30 transition-all"
-            title="Attach file"
-          >
-            <Paperclip size={18} className={uploading ? "animate-spin" : ""} />
-          </button>
-
-          {/* Mic button */}
-          <button
-            onClick={toggleListen}
-            className={`flex-shrink-0 p-2 rounded-xl transition-all ${
-              isListening ? "text-red-400 bg-red-500/10 animate-pulse" : "text-gray-400 hover:text-white hover:bg-white/5"
-            }`}
-             title={isListening ? "Stop listening" : "Start speaking"}
-          >
-            <Mic size={18} />
-          </button>
-
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Send a message... (type / for commands)"
-            rows={1}
-            className="flex-1 bg-transparent text-sm text-white placeholder-gray-500 resize-none outline-none max-h-40"
-          />
-          {isLoading ? (
-            <button
-              onClick={onStop}
-              className="flex-shrink-0 p-2 rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-all"
-              title="Stop generating"
-            >
-              <Square size={18} />
-            </button>
-          ) : (
-            <button
-              onClick={handleSubmit}
-              disabled={!input.trim() && attachments.length === 0}
-              className="flex-shrink-0 p-2 rounded-xl bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-            >
-              <Send size={18} />
-            </button>
-          )}
-        </GlassCard>
-      )}
+      </div>
     </div>
   );
 }
