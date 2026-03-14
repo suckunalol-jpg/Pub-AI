@@ -75,11 +75,11 @@ function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessagePr
         <div className="flex items-start gap-4 hover:bg-white/[0.02] transition-colors p-2 rounded-sm group">
           
           {/* Avatar / Prompt Prefix */}
-          <div className="flex-shrink-0 pt-0.5 select-none w-8 flex justify-end">
+          <div className="flex-shrink-0 pt-0.5 select-none w-10 flex justify-end">
             {isUser ? (
-              <span className="text-accent font-bold">$</span>
+              <span className="text-accent font-bold text-sm">$</span>
             ) : (
-              <PixelMascot phase="response" size={24} className="filter grayscale opacity-70 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-300" />
+              <PixelMascot phase="response" size={32} className="opacity-80 group-hover:opacity-100 transition-all duration-300" />
             )}
           </div>
 
@@ -162,8 +162,8 @@ function ChatMessage({ message, onFeedback, isStreaming = false }: ChatMessagePr
     >
       {/* AI avatar */}
       {!isUser && (
-        <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center mt-1">
-          <PixelMascot phase="response" size={32} className="filter drop-shadow-[0_0_5px_rgba(91,139,184,0.5)]" />
+        <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center mt-1">
+          <PixelMascot phase="response" size={40} />
         </div>
       )}
 

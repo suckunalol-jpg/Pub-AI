@@ -292,12 +292,12 @@ export default function Home() {
   return (
     <main className="relative h-screen w-screen flex flex-col overflow-hidden bg-black font-mono text-[#c8d6e5]" data-theme={theme}>
       {/* Top Application Header (Claude Code Style) */}
-      <header className="h-10 border-b border-accent/20 bg-black flex items-center justify-between px-4 shrink-0">
+      <header className="h-12 border-b border-accent/20 bg-black flex items-center justify-between px-5 shrink-0">
         <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="PubAI" className="h-4 filter drop-shadow-[0_0_0_rgba(0,0,0,0)]" />
-          <span className="text-xs font-bold font-arcade tracking-wider text-accent drop-shadow-[0_0_0_rgba(0,0,0,0)]">PubAI</span>
+          <img src="/logo.png" alt="PubAI" className="h-7" />
+          <span className="text-sm font-bold font-arcade tracking-wider text-accent">PubAI</span>
         </div>
-        <div className="text-[10px] text-accent/60 tracking-widest uppercase">
+        <div className="text-[10px] text-gray-500 tracking-widest uppercase">
           [ USER: {username} ] {role === "owner" && "| [ ENGINE: vLLM TPU ]"}
         </div>
       </header>

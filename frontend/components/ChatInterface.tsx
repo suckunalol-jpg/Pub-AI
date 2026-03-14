@@ -379,7 +379,7 @@ export default function ChatInterface() {
     <div className="flex flex-col h-full relative font-mono text-sm">
 
       {/* Agent Tabs */}
-      <div className="flex items-center justify-between px-4 py-1.5 bg-[#020813] border-b border-accent/20 shrink-0">
+      <div className="flex items-center justify-between px-4 py-1.5 bg-black border-b border-accent/20 shrink-0">
         <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar">
           {Object.keys(agentStates).map((agentName) => (
             <button
@@ -416,18 +416,20 @@ export default function ChatInterface() {
         {messages.length === 0 && !isLoading && (
           <div className="h-full flex flex-col justify-center px-8 lg:px-20 animate-fade-in relative max-w-5xl mx-auto">
             
-            {/* Claude-Code styled Zero State */}
-            <div className="text-accent/80 text-xs mb-8 flex items-center gap-3 relative before:content-[''] before:absolute before:left-0 before:top-1/2 before:w-16 before:h-px before:bg-accent/40 pl-20 uppercase tracking-widest">
-              <span>Claude Code v2.1.72</span>
-              <span className="w-16 h-px bg-accent/40" />
+            {/* PubAI styled Zero State */}
+            <div className="text-accent/60 text-xs mb-6 flex items-center gap-3 uppercase tracking-widest">
+              <span className="w-12 h-px bg-accent/20" />
+              <span>PubAI v1.0</span>
+              <span className="w-12 h-px bg-accent/20" />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border border-accent/40 rounded-sm">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border border-accent/20 rounded-sm">
               
               {/* Left Pane: Mascot and Welcome */}
-              <div className="p-8 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-accent/20 relative">
-                <div className="text-accent font-bold mb-8 text-center text-lg">Welcome back {username}!</div>
-                <PixelMascot phase="idle" size={96} className="filter drop-shadow-[0_0_8px_rgba(91,139,184,0.3)] hover:scale-105 transition-transform duration-300" />
+              <div className="p-10 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-accent/20 relative">
+                <img src="/logo.png" alt="PubAI" className="h-16 mb-4" />
+                <div className="text-accent font-bold mb-6 text-center text-lg">Welcome back {username}!</div>
+                <PixelMascot phase="idle" size={128} className="hover:scale-105 transition-transform duration-300" />
                 
                 <div className="mt-8 text-center space-y-1 text-xs text-gray-500">
                   <div>Qwen 2.5 TPU with high effort · PubAI Pro</div>
