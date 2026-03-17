@@ -110,6 +110,13 @@ class Orchestrator:
         except Exception as e:
             agent.status = "failed"
             agent.result = {"error": str(e)}
+        finally:
+            # Destroy the agent's workspace container when done
+            try:
+                from executor.container_manager import container_manager
+                await container_manager.destroy(agent_id)
+            except Exception:
+                pass
 
     async def send_message(self, agent_id: uuid.UUID, message: str) -> str:
         agent = self._agents.get(agent_id)
@@ -127,6 +134,13 @@ class Orchestrator:
         task = self._tasks.pop(agent_id, None)
         if task and not task.done():
             task.cancel()
+
+        # Destroy container
+        try:
+            from executor.container_manager import container_manager
+            await container_manager.destroy(agent_id)
+        except Exception:
+            pass
 
         # Update DB
         result = await db.execute(select(AgentSession).where(AgentSession.id == agent_id))

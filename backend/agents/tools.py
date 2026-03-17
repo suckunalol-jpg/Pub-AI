@@ -116,11 +116,14 @@ def tools_prompt() -> str:
     return "\n".join(lines)
 
 
-async def execute_tool(name: str, params: Dict[str, Any]) -> ToolResult:
+async def execute_tool(name: str, params: Dict[str, Any], agent_id=None) -> ToolResult:
     tool = get_tool(name)
     if not tool:
         return ToolResult(success=False, output=f"Unknown tool: {name}")
     try:
+        if agent_id is not None:
+            params = dict(params)
+            params["_agent_id"] = agent_id
         return await tool.fn(params)
     except Exception as e:
         return ToolResult(success=False, output=f"Tool error ({name}): {e}")
@@ -225,10 +228,11 @@ async def tool_web_fetch(params: Dict[str, Any]) -> ToolResult:
 async def tool_execute_code(params: Dict[str, Any]) -> ToolResult:
     language = params.get("language", "python")
     code = params.get("code", "")
+    agent_id = params.pop("_agent_id", None)
     if not code:
         return ToolResult(success=False, output="No code provided")
 
-    result = await sandbox.execute(language=language, code=code)
+    result = await sandbox.execute(language=language, code=code, agent_id=agent_id)
     success = result.get("exit_code", 1) == 0
     output = result.get("output", "")
     return ToolResult(success=success, output=output, data=result)
@@ -616,9 +620,23 @@ async def tool_bash(params: Dict[str, Any]) -> ToolResult:
     command = params.get("command", "")
     is_bg = params.get("is_background", False)
     cwd = params.get("cwd")
+    agent_id = params.pop("_agent_id", None)
     if not command:
         return ToolResult(success=False, output="No command provided")
 
+    # Route through container if agent has workspace
+    if agent_id is not None:
+        from config import settings as _settings
+        if _settings.WORKSPACE_ENABLED:
+            from executor.container_manager import container_manager
+            result = await container_manager.exec_command(agent_id, command, cwd=cwd)
+            return ToolResult(
+                success=(result.get("exit_code", 1) == 0),
+                output=result.get("output", ""),
+                data=result,
+            )
+
+    # Local fallback
     dangerous = ["rm -rf /", "mkfs", "dd if=", ":(){", "fork bomb", "shutdown", "reboot"]
     for d in dangerous:
         if d in command.lower():
@@ -2528,3 +2546,246 @@ Be concise and clear. Focus on what it does and why, not syntax basics."""
         temperature=0.3,
     )
     return ToolResult(success=True, output=resp.content)
+
+
+# ===========================================================================
+# WORKSPACE TOOLS (per-agent container operations)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# 68. Workspace Info
+# ---------------------------------------------------------------------------
+
+@register_tool(
+    name="workspace_info",
+    description="Get information about your workspace container: OS, disk usage, memory, running processes, installed tools.",
+    parameters={"detail": "(optional) 'full' for detailed info, 'disk' for disk only, 'processes' for process list"},
+)
+async def tool_workspace_info(params: Dict[str, Any]) -> ToolResult:
+    agent_id = params.pop("_agent_id", None)
+    detail = params.get("detail", "full")
+    if agent_id is None:
+        return ToolResult(success=True, output="No workspace container (running locally)")
+    from executor.container_manager import container_manager
+    cmds = {
+        "full": "uname -a && echo '---' && df -h /workspace && echo '---' && free -m && echo '---' && ps aux --sort=-%cpu | head -10",
+        "disk": "df -h",
+        "processes": "ps aux --sort=-%cpu | head -20",
+    }
+    cmd = cmds.get(detail, cmds["full"])
+    result = await container_manager.exec_command(agent_id, cmd, timeout=15)
+    return ToolResult(success=(result["exit_code"] == 0), output=result["output"])
+
+
+# ---------------------------------------------------------------------------
+# 69. APT Install
+# ---------------------------------------------------------------------------
+
+@register_tool(
+    name="apt_install",
+    description="Install system packages inside your workspace container using apt-get. You are root and have full control.",
+    parameters={"packages": "Space-separated list of package names to install, e.g. 'nmap git curl'"},
+)
+async def tool_apt_install(params: Dict[str, Any]) -> ToolResult:
+    agent_id = params.pop("_agent_id", None)
+    packages = params.get("packages", "")
+    if not packages:
+        return ToolResult(success=False, output="No packages specified")
+    if agent_id is None:
+        return ToolResult(success=False, output="No workspace container available — spawn an agent first")
+    from executor.container_manager import container_manager
+    result = await container_manager.exec_command(
+        agent_id,
+        f"DEBIAN_FRONTEND=noninteractive apt-get update -qq && apt-get install -y --no-install-recommends {packages}",
+        timeout=120,
+    )
+    return ToolResult(success=(result["exit_code"] == 0), output=result["output"])
+
+
+# ---------------------------------------------------------------------------
+# 70. Service Manage
+# ---------------------------------------------------------------------------
+
+@register_tool(
+    name="service_manage",
+    description="Start, stop, restart, or check status of services inside your workspace container.",
+    parameters={
+        "action": "start, stop, restart, or status",
+        "service": "Service name, e.g. 'ssh', 'docker', 'postgresql', 'nginx'",
+    },
+)
+async def tool_service_manage(params: Dict[str, Any]) -> ToolResult:
+    agent_id = params.pop("_agent_id", None)
+    action = params.get("action", "status")
+    service = params.get("service", "")
+    if not service:
+        return ToolResult(success=False, output="No service specified")
+    if agent_id is None:
+        return ToolResult(success=False, output="No workspace container available")
+    from executor.container_manager import container_manager
+    result = await container_manager.exec_command(
+        agent_id, f"service {service} {action} 2>&1 || systemctl {action} {service} 2>&1", timeout=30,
+    )
+    return ToolResult(success=(result["exit_code"] == 0), output=result["output"])
+
+
+# ---------------------------------------------------------------------------
+# 71. Docker Control
+# ---------------------------------------------------------------------------
+
+@register_tool(
+    name="docker_control",
+    description="Run Docker commands inside your workspace container (Docker-in-Docker). Build images, run containers, inspect logs, etc.",
+    parameters={"command": "Docker command without the 'docker' prefix, e.g. 'run -d nginx' or 'ps -a' or 'images'"},
+)
+async def tool_docker_control(params: Dict[str, Any]) -> ToolResult:
+    agent_id = params.pop("_agent_id", None)
+    command = params.get("command", "")
+    if not command:
+        return ToolResult(success=False, output="No docker command specified")
+    if agent_id is None:
+        return ToolResult(success=False, output="No workspace container available")
+    from executor.container_manager import container_manager
+    result = await container_manager.exec_command(agent_id, f"docker {command}", timeout=120)
+    return ToolResult(success=(result["exit_code"] == 0), output=result["output"])
+
+
+# ---------------------------------------------------------------------------
+# 72. SSH Execute
+# ---------------------------------------------------------------------------
+
+@register_tool(
+    name="ssh_execute",
+    description="SSH into a remote host from your workspace container and run a command.",
+    parameters={
+        "host": "Remote hostname or IP",
+        "command": "Command to run on the remote host",
+        "user": "(optional) SSH username, default 'root'",
+        "port": "(optional) SSH port, default 22",
+        "key_path": "(optional) Path to SSH private key inside your container",
+    },
+)
+async def tool_ssh_execute(params: Dict[str, Any]) -> ToolResult:
+    agent_id = params.pop("_agent_id", None)
+    host = params.get("host", "")
+    command = params.get("command", "")
+    user = params.get("user", "root")
+    port = params.get("port", 22)
+    key_path = params.get("key_path", "")
+    if not host or not command:
+        return ToolResult(success=False, output="host and command are required")
+    if agent_id is None:
+        return ToolResult(success=False, output="No workspace container available")
+    from executor.container_manager import container_manager
+    key_opt = f"-i {key_path}" if key_path else "-o StrictHostKeyChecking=no"
+    ssh_cmd = f"ssh {key_opt} -p {port} {user}@{host} '{command}'"
+    result = await container_manager.exec_command(agent_id, ssh_cmd, timeout=60)
+    return ToolResult(success=(result["exit_code"] == 0), output=result["output"])
+
+
+# ---------------------------------------------------------------------------
+# 73. File Transfer
+# ---------------------------------------------------------------------------
+
+@register_tool(
+    name="file_transfer",
+    description="Transfer files to/from your workspace container using wget, curl, scp, or rsync.",
+    parameters={
+        "method": "wget, curl, scp_download, scp_upload, or rsync",
+        "source": "Source URL or path",
+        "dest": "(optional) Destination path in container, default /workspace/downloads/",
+    },
+)
+async def tool_file_transfer(params: Dict[str, Any]) -> ToolResult:
+    agent_id = params.pop("_agent_id", None)
+    method = params.get("method", "wget")
+    source = params.get("source", "")
+    dest = params.get("dest", "/workspace/downloads/")
+    if not source:
+        return ToolResult(success=False, output="source is required")
+    if agent_id is None:
+        return ToolResult(success=False, output="No workspace container available")
+    from executor.container_manager import container_manager
+    cmds = {
+        "wget": f"mkdir -p {dest} && wget -P {dest} '{source}'",
+        "curl": f"mkdir -p {dest} && curl -L -o {dest}/$(basename '{source}') '{source}'",
+        "scp_download": f"mkdir -p {dest} && scp -o StrictHostKeyChecking=no '{source}' {dest}",
+        "rsync": f"rsync -avz '{source}' {dest}",
+    }
+    cmd = cmds.get(method, cmds["wget"])
+    result = await container_manager.exec_command(agent_id, cmd, timeout=120)
+    return ToolResult(success=(result["exit_code"] == 0), output=result["output"])
+
+
+# ---------------------------------------------------------------------------
+# 74. Cron Manage
+# ---------------------------------------------------------------------------
+
+@register_tool(
+    name="cron_manage",
+    description="Create, list, or delete cron jobs inside your workspace container for scheduled/recurring tasks.",
+    parameters={
+        "action": "add, list, or remove",
+        "schedule": "(for add) Cron schedule, e.g. '*/5 * * * *' for every 5 minutes",
+        "command": "(for add) Command to schedule",
+        "job_id": "(for remove) Job identifier string to match and remove",
+    },
+)
+async def tool_cron_manage(params: Dict[str, Any]) -> ToolResult:
+    agent_id = params.pop("_agent_id", None)
+    action = params.get("action", "list")
+    if agent_id is None:
+        return ToolResult(success=False, output="No workspace container available")
+    from executor.container_manager import container_manager
+    if action == "list":
+        result = await container_manager.exec_command(agent_id, "crontab -l 2>/dev/null || echo '(no cron jobs)'", timeout=10)
+    elif action == "add":
+        schedule = params.get("schedule", "")
+        command = params.get("command", "")
+        if not schedule or not command:
+            return ToolResult(success=False, output="schedule and command required for add")
+        cron_entry = f"{schedule} {command}"
+        result = await container_manager.exec_command(
+            agent_id,
+            f"(crontab -l 2>/dev/null; echo '{cron_entry}') | crontab -",
+            timeout=15,
+        )
+    elif action == "remove":
+        job_id = params.get("job_id", "")
+        if not job_id:
+            return ToolResult(success=False, output="job_id required for remove")
+        result = await container_manager.exec_command(
+            agent_id,
+            f"crontab -l 2>/dev/null | grep -v '{job_id}' | crontab -",
+            timeout=15,
+        )
+    else:
+        return ToolResult(success=False, output=f"Unknown action: {action}")
+    return ToolResult(success=(result["exit_code"] == 0), output=result["output"])
+
+
+# ---------------------------------------------------------------------------
+# 75. Workspace Browse (noVNC)
+# ---------------------------------------------------------------------------
+
+@register_tool(
+    name="workspace_browse",
+    description="Get the noVNC URL to access your workspace's GUI desktop in a browser. Use this to interact with graphical applications like GIMP, LibreOffice, Blender, etc.",
+    parameters={},
+)
+async def tool_workspace_browse(params: Dict[str, Any]) -> ToolResult:
+    agent_id = params.pop("_agent_id", None)
+    if agent_id is None:
+        return ToolResult(success=False, output="No workspace container available")
+    from executor.container_manager import container_manager
+    url = container_manager.get_vnc_url(agent_id)
+    if url:
+        return ToolResult(success=True, output=f"Your GUI desktop is available at: {url}\nOpen this URL in a browser to interact with graphical applications.")
+    # Try to start VNC if not running
+    ws = container_manager._containers.get(agent_id)
+    if ws:
+        await container_manager._start_vnc(ws.container_name)
+        url = container_manager.get_vnc_url(agent_id)
+        if url:
+            return ToolResult(success=True, output=f"VNC started. Your GUI desktop: {url}")
+    return ToolResult(success=False, output="VNC not available. Ensure WORKSPACE_VNC_ENABLED=true and the workspace container is running.")

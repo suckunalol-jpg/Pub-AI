@@ -176,3 +176,13 @@ Only use tools if they would add concrete value (e.g., looking up current info).
 
 {TOOL_USE_INSTRUCTIONS}
 """
+
+
+def build_agent_system_prompt(include_workspace: bool = False) -> str:
+    """Build the full agent system prompt, optionally including workspace behavior."""
+    from config import settings
+    base = CHAT_AGENT_SYSTEM_PROMPT
+    if include_workspace and settings.WORKSPACE_ENABLED:
+        from agents.autonomy import WORKSPACE_BEHAVIOR
+        base = base + WORKSPACE_BEHAVIOR
+    return base

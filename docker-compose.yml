@@ -16,6 +16,11 @@ services:
       - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
       - SECRET_KEY=${SECRET_KEY:-dev-secret-change-me}
       - CORS_ORIGINS=["http://localhost:3000"]
+      - WORKSPACE_ENABLED=${WORKSPACE_ENABLED:-true}
+      - WORKSPACE_IMAGE=${WORKSPACE_IMAGE:-pubai-workspace:latest}
+      - WORKSPACE_PRIVILEGED=${WORKSPACE_PRIVILEGED:-true}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       db:
         condition: service_healthy
@@ -73,6 +78,14 @@ services:
     restart: unless-stopped
     networks:
       - pubai
+
+  workspace-builder:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.workspace
+    image: pubai-workspace:latest
+    profiles: ["build"]
+    command: "echo 'Workspace image built'"
 
 networks:
   pubai:

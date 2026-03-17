@@ -183,9 +183,9 @@ class BaseAgent:
                     tool_results.append("Error: Invalid JSON in tool call")
 
             if tool_calls:
-                # Execute all tool calls in parallel
+                # Execute all tool calls in parallel, passing agent_id for container routing
                 tasks = [
-                    execute_tool(call.get("tool", ""), call.get("params", {}))
+                    execute_tool(call.get("tool", ""), call.get("params", {}), agent_id=self.id)
                     for call in tool_calls
                 ]
                 results = await asyncio.gather(*tasks, return_exceptions=True)

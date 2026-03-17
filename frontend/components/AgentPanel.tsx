@@ -23,6 +23,7 @@ import {
   Brain,
 } from "lucide-react";
 import GlassCard from "./GlassCard";
+import WorkspaceTerminal from "./WorkspaceTerminal";
 import { cn } from "@/lib/utils";
 import * as api from "@/lib/api";
 
@@ -75,6 +76,7 @@ export default function AgentPanel() {
   const [showTeamBuilder, setShowTeamBuilder] = useState(false);
   const [teamConfig, setTeamConfig] = useState<TeamConfig>({ name: "", task: "", agents: [] });
   const [chatAgent, setChatAgent] = useState<{ id: string; message: string } | null>(null);
+  const [showTerminal, setShowTerminal] = useState<string | null>(null);
 
   // Poll running agents every 5s
   useEffect(() => {
@@ -360,6 +362,16 @@ export default function AgentPanel() {
                       <p className="text-xs text-gray-500 truncate">{agent.task}</p>
                     </div>
                     <div className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowTerminal(showTerminal === agent.id ? null : agent.id);
+                        }}
+                        className="px-2 py-1 text-xs bg-blue-900/50 hover:bg-blue-800/60 text-blue-300 border border-blue-700/40 rounded transition-colors"
+                        title="Open workspace terminal"
+                      >
+                        {showTerminal === agent.id ? "Close Terminal" : "Terminal"}
+                      </button>
                       {agent.status === "running" && (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleStop(agent.id); }}
@@ -431,6 +443,20 @@ export default function AgentPanel() {
                               >
                                 <Send size={12} />
                               </button>
+                            </div>
+                          )}
+
+                          {/* Workspace terminal */}
+                          {showTerminal === agent.id && (
+                            <div className="h-64 border border-gray-700 rounded overflow-hidden">
+                              <WorkspaceTerminal
+                                agentId={agent.id}
+                                token={
+                                  typeof window !== "undefined"
+                                    ? localStorage.getItem("pub_token") || ""
+                                    : ""
+                                }
+                              />
                             </div>
                           )}
                         </div>

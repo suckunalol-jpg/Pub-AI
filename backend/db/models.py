@@ -51,7 +51,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(GUID, primary_key=True, default=gen_uuid)
-    username = Column(String(100), nullable=False)
+    username = Column(String(100), unique=True, nullable=False)
     email = Column(String(255), unique=True, nullable=True)
     hashed_password = Column(String(255), nullable=False)
     role = Column(String(20), default="user")
@@ -153,6 +153,11 @@ class AgentSession(Base):
     result = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
+
+    container_name = Column(String(100), nullable=True)
+    container_status = Column(String(20), nullable=True)
+    workspace_volume = Column(String(100), nullable=True)
+    vnc_port = Column(Integer, nullable=True)
 
     conversation = relationship("Conversation", back_populates="agent_sessions")
     parent = relationship("AgentSession", remote_side=[id])

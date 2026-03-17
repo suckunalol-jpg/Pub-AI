@@ -23,6 +23,7 @@ class SpawnRequest(BaseModel):
     task: str
     conversation_id: Optional[uuid.UUID] = None
     config: Optional[dict] = None
+    workspace_config: Optional[dict] = None  # own_container, parent_agent_id, etc.
 
 
 class AgentStatus(BaseModel):
@@ -31,6 +32,8 @@ class AgentStatus(BaseModel):
     agent_name: str
     status: str
     result: Optional[dict]
+    container_name: Optional[str] = None
+    container_status: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -54,12 +57,16 @@ async def spawn_agent(
         await db.flush()
         conv_id = conv.id
 
+    config = req.config or {}
+    if req.workspace_config:
+        config["workspace"] = req.workspace_config
+
     session = await orchestrator.spawn(
         db=db,
         agent_type=req.agent_type,
         task=req.task,
         conversation_id=conv_id,
-        config=req.config or {},
+        config=config,
         user_id=user.id,
     )
     return session

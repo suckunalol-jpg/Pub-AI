@@ -1,0 +1,125 @@
+FROM kalilinux/kali-rolling
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ── Layer 1: Core system + Kali security tools ──
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    kali-tools-top10 \
+    yara libyara-dev suricata zeek snort \
+    openscap-scanner openscap-utils \
+    sqlmap gobuster nikto enum4linux \
+    seclists wordlists hashcat john \
+    openvpn proxychains4 tor wireguard-tools \
+    ncat socat tcpdump tshark wireshark-common \
+    hping3 dsniff ettercap-text-only \
+    net-tools iproute2 iputils-ping dnsutils whois traceroute \
+    binwalk foremost sleuthkit \
+    radare2 gdb gdb-multiarch strace ltrace \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Layer 2: All programming languages ──
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential gcc g++ cmake make pkg-config nasm \
+    python3 python3-pip python3-venv python3-dev \
+    default-jdk maven \
+    golang-go \
+    rustc cargo \
+    ruby ruby-dev \
+    php php-cli \
+    perl \
+    lua5.4 \
+    r-base \
+    ghc \
+    erlang \
+    bash zsh fish \
+    sqlite3 postgresql-client mysql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Node.js 20 LTS + TypeScript ──
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g typescript tsx ts-node \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── PowerShell ──
+RUN apt-get update && apt-get install -y powershell 2>/dev/null || \
+    (wget -q "https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb" -O /tmp/packages-microsoft-prod.deb \
+    && dpkg -i /tmp/packages-microsoft-prod.deb \
+    && apt-get update && apt-get install -y powershell) || true \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Layer 3: Graphics / Media / Audio / Video ──
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gimp inkscape imagemagick graphicsmagick \
+    ffmpeg sox lame flac vorbis-tools opus-tools \
+    gnuplot graphviz \
+    pandoc \
+    libreoffice \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Layer 4: Science / Geospatial / IoT ──
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    octave \
+    gdal-bin python3-gdal \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Layer 5: Networking / Communication / Remote Access ──
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssh-client openssh-server sshpass rsync \
+    netcat-openbsd \
+    mosquitto-clients \
+    nfs-common smbclient \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Layer 6: Docker-in-Docker + DevOps tools ──
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    docker.io containerd \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Layer 7: GUI support (noVNC + Xvfb for graphical apps) ──
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    xvfb x11vnc novnc xfce4 xfce4-terminal dbus-x11 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Layer 8: Browsers ──
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium firefox-esr \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Layer 9: Python packages ──
+RUN pip3 install --no-cache-dir --break-system-packages \
+    scapy pwntools paramiko netaddr python-nmap \
+    pycryptodome cryptography yara-python stix2 taxii2-client \
+    angr capstone keystone-engine z3-solver \
+    numpy pandas scipy scikit-learn matplotlib seaborn \
+    torch torchvision torchaudio \
+    transformers datasets huggingface-hub \
+    requests httpx beautifulsoup4 selenium scrapy \
+    flask fastapi uvicorn django \
+    sqlalchemy psycopg2-binary redis pymongo neo4j \
+    openpyxl pillow pypdf python-docx python-pptx \
+    ccxt yfinance pandas-ta \
+    sympy networkx biopython \
+    geopandas folium shapely \
+    paho-mqtt pyserial \
+    jupyterlab notebook ipykernel \
+    docker fabric invoke boto3 \
+    click rich tqdm pyyaml toml
+
+# ── Layer 10: System utilities ──
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl wget jq tmux vim nano htop unzip tar file \
+    cron at supervisor p7zip-full \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── noVNC startup script ──
+RUN printf '#!/bin/bash\nXvfb :99 -screen 0 1920x1080x24 &\nsleep 1\nx11vnc -display :99 -forever -nopw -bg 2>/dev/null\n/usr/share/novnc/utils/novnc_proxy --vnc localhost:5900 --listen 6080 &\n' > /usr/local/bin/start-vnc.sh \
+    && chmod +x /usr/local/bin/start-vnc.sh
+
+# ── Workspace structure ──
+RUN mkdir -p /workspace /shared /team-shared /workspace/downloads /workspace/.cache
+WORKDIR /workspace
+
+ENV DISPLAY=:99
+ENV HOME=/root
+
+CMD ["tail", "-f", "/dev/null"]

@@ -150,9 +150,22 @@ async def lifespan(app: FastAPI):
     from training.auto_retrain import auto_retrainer
     auto_retrainer.start()
 
+    # Start workspace container reaper
+    if settings.WORKSPACE_ENABLED:
+        from executor.container_manager import container_manager
+        import asyncio
+        asyncio.create_task(container_manager.run_reaper())
+        print("[Pub AI] Workspace container manager started")
+
     yield
 
-    # Stop auto-retrainer before shutdown
+    # Clean up all workspace containers
+    if settings.WORKSPACE_ENABLED:
+        from executor.container_manager import container_manager as _cm
+        await _cm.cleanup_all()
+        print("[Pub AI] Workspace containers cleaned up")
+
+    # Stop auto-retrainer
     auto_retrainer.stop()
     await ai_provider.close()
     print("[Pub AI] Shutdown complete")
@@ -192,6 +205,8 @@ from api.preferences import router as preferences_router
 from api.commands import router as commands_router
 from api.uploads import router as uploads_router
 from api.ide import router as ide_router
+from api.workspaces import router as workspaces_router
+from api.ws_terminal import router as ws_terminal_router
 
 app.include_router(auth_router)
 app.include_router(chat_router)
@@ -210,6 +225,8 @@ app.include_router(preferences_router)
 app.include_router(commands_router)
 app.include_router(uploads_router)
 app.include_router(ide_router)
+app.include_router(workspaces_router)
+app.include_router(ws_terminal_router)
 
 # Serve uploaded files as static assets
 _uploads_dir = Path(__file__).resolve().parent / "uploads"

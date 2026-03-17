@@ -756,3 +756,60 @@ export function ideShell(command: string, cwd?: string) {
     body: JSON.stringify({ command, cwd }),
   });
 }
+
+// ---------- Workspace Container API ----------
+
+export function getWorkspaceInfo(agentId: string) {
+  return request<Record<string, unknown>>(`/api/workspaces/${agentId}`);
+}
+
+export function execInWorkspace(
+  agentId: string,
+  command: string,
+  timeout?: number
+) {
+  return request<{ output: string; exit_code: number; duration_ms: number }>(
+    `/api/workspaces/${agentId}/exec`,
+    {
+      method: "POST",
+      body: { command, timeout },
+    }
+  );
+}
+
+export function uploadToWorkspace(
+  agentId: string,
+  path: string,
+  content: string
+) {
+  return request<void>(`/api/workspaces/${agentId}/upload`, {
+    method: "POST",
+    body: { path, content },
+  });
+}
+
+export async function downloadFromWorkspace(
+  agentId: string,
+  path: string
+): Promise<Blob> {
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("pub_token") : null;
+  const res = await fetch(
+    `${API_BASE}/api/workspaces/${agentId}/download?path=${encodeURIComponent(path)}`,
+    {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }
+  );
+  if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+  return res.blob();
+}
+
+export function destroyWorkspace(agentId: string) {
+  return request<void>(`/api/workspaces/${agentId}`, { method: "DELETE" });
+}
+
+export function listWorkspaces() {
+  return request<unknown[]>("/api/workspaces");
+}
