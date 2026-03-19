@@ -17,6 +17,8 @@ class GPUProvider(str, Enum):
 BASE_MODELS: Dict[str, str] = {
     "deepseek": "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct",
     "qwen": "Qwen/Qwen2.5-Coder-7B-Instruct",
+    "qwen3.5": "Jackrong/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled",
+    "pub-ai-v2": "suckunalol/pub-ai-v2",
 }
 
 

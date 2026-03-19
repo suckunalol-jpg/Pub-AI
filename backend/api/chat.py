@@ -17,7 +17,7 @@ from typing import AsyncGenerator, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.brain import brain
@@ -434,8 +434,9 @@ async def stream_message(
 
 # ---------- Agent-Powered Streaming ----------
 
-# Global agent instances keyed by conversation_id for persistence
+# Global agent instances keyed by conversation_id for persistence (LRU-style, max 50)
 _agent_instances: dict[str, "AgentInstance"] = {}
+_AGENT_CACHE_MAX = 50
 
 
 class AgentInstance:
@@ -450,8 +451,16 @@ class AgentInstance:
 
 def _get_or_create_agent(conversation_id: str) -> "AgentInstance":
     """Get existing agent for a conversation or create a new one."""
-    if conversation_id not in _agent_instances:
-        _agent_instances[conversation_id] = AgentInstance(conversation_id)
+    if conversation_id in _agent_instances:
+        # Move to end (most recently used)
+        inst = _agent_instances.pop(conversation_id)
+        _agent_instances[conversation_id] = inst
+        return inst
+    # Evict oldest if at capacity
+    if len(_agent_instances) >= _AGENT_CACHE_MAX:
+        oldest_key = next(iter(_agent_instances))
+        del _agent_instances[oldest_key]
+    _agent_instances[conversation_id] = AgentInstance(conversation_id)
     return _agent_instances[conversation_id]
 
 
@@ -587,7 +596,7 @@ async def stream_agent_message(
                 latency_ms=latency_ms,
             )
             db.add(assistant_msg)
-            conversation.updated_at = datetime.now()
+            conversation.updated_at = datetime.utcnow()
             await db.flush()
             await db.commit()
 
@@ -845,6 +854,41 @@ async def agent_stream_message(
             conversation.updated_at = datetime.utcnow()
             await db.flush()
             await db.commit()
+
+            # --- Auto-store knowledge if warranted ---
+            try:
+                from agents.memory import memory_system as _mem_sys
+                # Count how many turns exist in the conversation
+                turn_result = await db.execute(
+                    select(func.count(Message.id)).where(
+                        Message.conversation_id == conversation.id
+                    )
+                )
+                turn_count = turn_result.scalar() or 0
+
+                # Only trigger when: used tools AND response has code OR conversation has depth
+                should_store = (
+                    tools_used > 0 and (
+                        "```" in full_content or
+                        turn_count > 4
+                    )
+                )
+                if should_store:
+                    await _mem_sys.auto_store_learning(
+                        db=db,
+                        user_id=user.id,
+                        conversation_id=conversation.id,
+                        message_content=req.message,
+                        assistant_response=full_content,
+                        tools_used=list(set(
+                            m.group(1) for m in __import__('re').finditer(
+                                r'"tool":\s*"([^"]+)"', full_content
+                            )
+                        )),
+                    )
+                    await db.commit()
+            except Exception:
+                pass  # Never let auto-store break the response
 
             yield _sse_event("done", {
                 "message_id": str(assistant_msg.id),

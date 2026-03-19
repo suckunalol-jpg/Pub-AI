@@ -412,6 +412,100 @@ class MemorySystem:
 
         return "\n\n".join(parts)
 
+    async def auto_store_learning(
+        self,
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        message_content: str,
+        assistant_response: str,
+        tools_used: List[str],
+    ) -> Optional["KnowledgeEntry"]:
+        """Auto-detect if the AI produced novel knowledge worth storing.
+
+        Triggers when the response contains:
+        - Code blocks (solution patterns)
+        - Error fixes (debugging knowledge)
+        - Tool configurations
+        - Factual discoveries from web search
+
+        Returns the created KnowledgeEntry if stored, None otherwise.
+        """
+        # Check if response is worth storing
+        has_code = "```" in assistant_response
+        has_length_and_tools = len(assistant_response) > 500 and len(tools_used) > 0
+        has_fix_pattern = any(
+            p in assistant_response.lower()
+            for p in ("fixed", "the issue was", "solution:")
+        )
+
+        if not (has_code or has_length_and_tools or has_fix_pattern):
+            return None
+
+        # Generate title
+        title = message_content[:80].strip()
+
+        # Detect difficulty
+        if len(tools_used) > 3 or len(assistant_response) > 2000:
+            difficulty = "hard"
+        elif len(tools_used) > 0 or len(assistant_response) > 500:
+            difficulty = "medium"
+        else:
+            difficulty = "easy"
+
+        # Detect emotion
+        msg_lower = message_content.lower()
+        if any(w in msg_lower for w in ("error", "not working", "broken", "help")):
+            emotion = "frustrated"
+        elif any(w in msg_lower for w in ("how", "why", "what")):
+            emotion = "curious"
+        elif any(w in msg_lower for w in ("!", "awesome", "great", "thanks")):
+            emotion = "excited"
+        else:
+            emotion = "neutral"
+
+        # Build content
+        metadata = {
+            "tools_used": tools_used,
+            "topic": title[:50],
+            "difficulty": difficulty,
+            "emotion": emotion,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        content = (
+            f"**Question:** {message_content}\n\n"
+            f"**Answer:** {assistant_response[:3000]}\n\n"
+            f"**Metadata:** {json.dumps(metadata)}"
+        )
+
+        # Create KnowledgeEntry
+        from db.models import KnowledgeEntry
+
+        entry = KnowledgeEntry(
+            user_id=user_id,
+            title=title,
+            content=content,
+            source_type="auto-learned",
+            difficulty=difficulty,
+            emotion=emotion,
+            tools_used=tools_used,
+            auto_generated=True,
+            conversation_id=conversation_id,
+        )
+        db.add(entry)
+
+        # Also store a UserMemory entry for quick retrieval
+        await self.store_memory(
+            db=db,
+            user_id=user_id,
+            memory_type="fact",
+            key=self._make_key(message_content),
+            value=f"Solved: {message_content[:200]}",
+            confidence=75,
+        )
+
+        return entry
+
 
 # Singleton
 memory_system = MemorySystem()

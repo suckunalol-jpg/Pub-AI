@@ -101,6 +101,7 @@ class Conversation(Base):
     user = relationship("User", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation", order_by="Message.created_at")
     agent_sessions = relationship("AgentSession", back_populates="conversation")
+    knowledge_entries = relationship("KnowledgeEntry", back_populates="conversation", foreign_keys="KnowledgeEntry.conversation_id")
 
 
 # ---------- Messages ----------
@@ -205,9 +206,15 @@ class KnowledgeEntry(Base):
     content = Column(Text, nullable=False)
     source_type = Column(String(50), default="manual")  # qa/doc/code/manual
     embedding_id = Column(String(100), nullable=True)
+    difficulty = Column(String(20), nullable=True)      # easy/medium/hard
+    emotion = Column(String(50), nullable=True)         # neutral/frustrated/curious/excited
+    tools_used = Column(JSON, nullable=True)            # ["bash", "web_search", ...]
+    auto_generated = Column(Boolean, default=False)     # True if auto-stored during conversation
+    conversation_id = Column(GUID, ForeignKey("conversations.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="knowledge_entries")
+    conversation = relationship("Conversation", foreign_keys=[conversation_id])
 
 
 # ---------- Execution Logs ----------
