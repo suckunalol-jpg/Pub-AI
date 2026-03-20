@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 # Constants
 # ---------------------------------------------------------------------------
 
-BASE_MODEL = "Jackrong/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled"
+BASE_MODEL = "unsloth/Qwen2.5-Coder-32B-Instruct-bnb-4bit"
 HF_REPO_LORA = "suckunalol/pub-ai-v2-lora"
 HF_REPO_MERGED = "suckunalol/pub-ai-v2"
 HF_REPO_GGUF = "suckunalol/pub-ai-v2-GGUF"
