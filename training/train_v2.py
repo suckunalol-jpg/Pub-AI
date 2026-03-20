@@ -65,6 +65,8 @@ def load_model_and_tokenizer(
     base_model: str,
     output_dir: str,
     resume_from: Optional[str],
+    seq_len: int = MAX_SEQ_LENGTH,
+    lora_rank: int = LORA_RANK,
 ):
     """
     Load the base model with 4-bit quantization and attach a LoRA adapter.
@@ -82,13 +84,13 @@ def load_model_and_tokenizer(
 
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name=resume_from if resume_from else base_model,
-            max_seq_length=MAX_SEQ_LENGTH,
+            max_seq_length=seq_len,
             dtype=None,
             load_in_4bit=True,
         )
         model = FastLanguageModel.get_peft_model(
             model,
-            r=LORA_RANK,
+            r=lora_rank,
             lora_alpha=LORA_ALPHA,
             lora_dropout=LORA_DROPOUT,
             target_modules=[
@@ -133,8 +135,8 @@ def load_model_and_tokenizer(
     model = prepare_model_for_kbit_training(model)
 
     lora_config = LoraConfig(
-        r=LORA_RANK,
-        lora_alpha=LORA_ALPHA,
+        r=lora_rank,
+        lora_alpha=lora_rank * 2,  # alpha = 2x rank
         lora_dropout=LORA_DROPOUT,
         target_modules=[
             "q_proj",
@@ -495,11 +497,11 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
 
     # Resolve training hyperparams (--fast sets defaults, individual flags override)
-    run_epochs  = args.epochs    if args.epochs    else (2     if args.fast else EPOCHS)
-    run_seq_len = args.max_seq_len if args.max_seq_len else (4096  if args.fast else MAX_SEQ_LENGTH)
-    run_packing = args.packing or args.fast
-    run_lora_rank = args.lora_rank if args.lora_rank else LORA_RANK
-    run_max_ds  = args.max_dataset_size if args.max_dataset_size else (40_000 if args.fast else None)
+    run_epochs    = args.epochs      if args.epochs      else (2      if args.fast else EPOCHS)
+    run_seq_len   = args.max_seq_len if args.max_seq_len else (2048   if args.fast else MAX_SEQ_LENGTH)
+    run_packing   = args.packing or args.fast
+    run_lora_rank = args.lora_rank   if args.lora_rank   else (32     if args.fast else LORA_RANK)
+    run_max_ds    = args.max_dataset_size if args.max_dataset_size else (40_000 if args.fast else None)
 
     logger.info("=" * 60)
     logger.info("Pub AI v2 Fine-tuning")
@@ -522,6 +524,8 @@ def main():
         base_model=BASE_MODEL,
         output_dir=output_dir,
         resume_from=args.resume,
+        seq_len=run_seq_len,
+        lora_rank=run_lora_rank,
     )
 
     # Ensure tokenizer has a padding token
