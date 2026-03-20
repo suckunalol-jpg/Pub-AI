@@ -85,13 +85,13 @@ def load_model_and_tokenizer(
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name=resume_from if resume_from else base_model,
             max_seq_length=seq_len,
-            dtype=None,
+            dtype=torch.bfloat16,
             load_in_4bit=True,
         )
         model = FastLanguageModel.get_peft_model(
             model,
             r=lora_rank,
-            lora_alpha=LORA_ALPHA,
+            lora_alpha=lora_rank * 2,
             lora_dropout=LORA_DROPOUT,
             target_modules=[
                 "q_proj",
@@ -104,11 +104,12 @@ def load_model_and_tokenizer(
             ],
             use_gradient_checkpointing="unsloth",
         )
-        logger.info("Loaded model with Unsloth.")
+        logger.info(f"Loaded model with Unsloth (4-bit, rank={lora_rank}, seq={seq_len}).")
         return model, tokenizer, True
 
-    except ImportError:
-        logger.info("Unsloth not available; falling back to transformers + PEFT.")
+    except Exception as e:
+        logger.warning(f"Unsloth failed ({type(e).__name__}: {e}); falling back to BnB + PEFT.")
+        torch.cuda.empty_cache()
 
     # --- HuggingFace + PEFT fallback ---
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -131,6 +132,8 @@ def load_model_and_tokenizer(
         quantization_config=bnb_config,
         device_map="auto",
         trust_remote_code=True,
+        torch_dtype=torch.bfloat16,
+        low_cpu_mem_usage=True,
     )
     model = prepare_model_for_kbit_training(model)
 
