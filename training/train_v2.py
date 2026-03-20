@@ -268,6 +268,7 @@ def setup_trainer(
     epochs: int = EPOCHS,
     seq_len: int = MAX_SEQ_LENGTH,
     packing: bool = False,
+    batch_size: int = BATCH_SIZE,
 ):
     """
     Build and return a TRL SFTTrainer configured for Pub AI v2.
@@ -308,7 +309,7 @@ def setup_trainer(
     training_args = TrainingArguments(
         output_dir=output_dir,
         num_train_epochs=epochs,
-        per_device_train_batch_size=BATCH_SIZE,
+        per_device_train_batch_size=run_batch,
         gradient_accumulation_steps=GRAD_ACCUM,
         learning_rate=LEARNING_RATE,
         warmup_ratio=WARMUP_RATIO,
@@ -486,6 +487,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=None, help="Override number of training epochs.")
     parser.add_argument("--max-seq-len", type=int, default=None, help="Override max sequence length.")
     parser.add_argument("--lora-rank", type=int, default=None, help="Override LoRA rank.")
+    parser.add_argument("--batch-size", type=int, default=None, help="Per-device train batch size (default 1).")
     parser.add_argument("--max-dataset-size", type=int, default=None, help="Cap total training examples.")
     parser.add_argument("--packing", action="store_true", help="Enable sequence packing (faster, less padding).")
     args = parser.parse_args()
@@ -505,6 +507,7 @@ def main():
     run_packing   = args.packing or args.fast
     run_lora_rank = args.lora_rank   if args.lora_rank   else (32     if args.fast else LORA_RANK)
     run_max_ds    = args.max_dataset_size if args.max_dataset_size else (40_000 if args.fast else None)
+    run_batch     = args.batch_size  if args.batch_size  else BATCH_SIZE
 
     logger.info("=" * 60)
     logger.info("Pub AI v2 Fine-tuning")
@@ -556,6 +559,7 @@ def main():
         epochs=run_epochs,
         seq_len=run_seq_len,
         packing=run_packing,
+        batch_size=run_batch,
     )
 
     # Train
